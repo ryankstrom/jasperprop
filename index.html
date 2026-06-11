@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jasper · LoRaWAN Propagation Study</title>
+<link rel="icon" type="image/svg+xml" href="brand/jasper-icon-cyan.svg" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Jasper / SLR brand palette */
+    --slate:#3f5355; --slate-d:#34464a; --slate-dd:#2b3a3b;
+    --paper:#f4f3ee; --bg:#ffffff; --line:#d9dcd2;
+    --txt:#27383a; --muted:#6f8182;
+    --accent:#2f8f8b; --accent-d:#247470; --cyan:#5ec5c2;
+    --good:#3f9d6b; --warn:#bf831c;
+    --serif:'Fraunces',Georgia,'Times New Roman',serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:var(--paper);color:var(--txt)}
+  body{display:flex;flex-direction:column}
+  /* brand header */
+  #brandbar{flex:none;height:80px;background:var(--slate-d);display:flex;align-items:center;
+    gap:18px;padding:0 22px;color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.15)}
+  #brandbar img.logo{height:46px;display:block}
+  #brandbar .divider{width:1px;height:40px;background:rgba(255,255,255,.25)}
+  #brandbar .title{font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:.2px;
+    color:#eef3f1}
+  #brandbar .title b{font-weight:600}
+  #brandbar .spacer{flex:1}
+  #brandbar .powered{font-size:14px;color:rgba(255,255,255,.65);letter-spacing:.3px}
+  #app{flex:1;min-height:0;display:flex}
+  #map{flex:1;height:100%;background:#dfe3df;cursor:crosshair}
+  #panel{width:400px;flex:none;background:var(--paper);border-left:1px solid var(--line);
+    overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:15px;font-size:16px}
+  #panel>*{flex-shrink:0}  /* scroll, don't squash, when content exceeds panel height */
+  h1{font-family:var(--serif);font-size:24px;font-weight:600;margin:0 0 4px;color:var(--slate)}
+  .sub{font-size:14.5px;color:var(--muted);margin:0 0 6px;line-height:1.5}
+  fieldset{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:0;
+    background:var(--bg);min-width:0;min-inline-size:0}
+  legend{font-size:13px;color:var(--accent-d);text-transform:uppercase;letter-spacing:.7px;
+    font-weight:600;padding:0 5px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0}
+  .row label{font-size:15.5px;color:var(--txt)}
+  .row .hint{font-size:13px;color:var(--muted)}
+  input[type=number],select{width:104px;background:#fff;border:1px solid var(--line);
+    color:var(--txt);border-radius:6px;padding:7px 9px;font-size:16px;text-align:right}
+  input[type=number]:focus,select:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 2px rgba(47,143,139,.18)}
+  input[type=range]{width:150px;accent-color:var(--accent)}
+  input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px;
+    font-size:16.5px;font-weight:600;cursor:pointer;width:100%}
+  button:hover{background:var(--accent-d)}
+  button:disabled{opacity:.5;cursor:default}
+  button.sec{background:#fff;border:1px solid var(--line);color:var(--slate);font-weight:500}
+  button.sec:hover{background:#fff;border-color:var(--accent)}
+  #status{font-size:14px;color:var(--muted);min-height:16px;line-height:1.45}
+  .readout{background:#fff;border:1px solid var(--line);border-radius:8px;padding:11px}
+  .readout .big{font-size:28px;font-weight:700;color:var(--accent)}
+  .readout .lbl{font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .legend-row{display:flex;align-items:center;gap:9px;font-size:14px;margin:4px 0}
+  .swatch{width:26px;height:14px;border-radius:2px;flex:none}
+  .foot{font-size:13px;color:var(--muted);line-height:1.55}
+  a{color:var(--accent-d)}
+  .pill{display:inline-block;font-size:13px;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:2px 8px;color:var(--muted)}
+  .modebtn.active{background:var(--slate);color:#fff;border-color:var(--slate);font-weight:600}
+  /* long gateway names: truncate instead of stretching the panel */
+  #gwSel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #gwInfo{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #hud{position:absolute;left:12px;bottom:18px;z-index:1000;display:none;pointer-events:none;
+    background:rgba(43,58,59,.93);border:1px solid rgba(255,255,255,.15);border-left-width:5px;
+    border-radius:8px;padding:10px 13px;font:15px system-ui;color:#eef3f1;
+    box-shadow:0 3px 12px rgba(0,0,0,.4);min-width:172px}
+  #hud .v{font-size:20px;font-weight:700}
+  #hud .m{font-size:13px;color:rgba(238,243,241,.7)}
+  /* Jasper map watermark */
+  #watermark{position:absolute;top:14px;right:16px;z-index:1000;pointer-events:none;
+    width:54px;height:auto;padding:9px;border-radius:11px;
+    background:rgba(255,255,255,.62);box-shadow:0 1px 5px rgba(0,0,0,.18);
+    opacity:.9;backdrop-filter:blur(1px)}
+  /* Jasper gateway marker */
+  .gw-badge{width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid var(--slate);
+    box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+  .gw-badge img{width:22px;height:22px}
+  .gw-badge.sel{border:3px solid var(--accent)}
+  .gw-badge.small{width:27px;height:27px;opacity:.88}
+  .gw-badge.small img{width:16px;height:16px}
+</style>
+</head>
+<body>
+<header id="brandbar">
+  <img class="logo" src="brand/jasper-logo-white.svg" alt="Jasper" />
+  <div class="divider"></div>
+  <div class="title">LoRaWAN <b>Propagation Study</b></div>
+  <div class="spacer"></div>
+  <div class="powered">Powered by SLR</div>
+</header>
+<div id="app">
+  <div id="map"><img id="watermark" src="brand/jasper-icon-cyan.svg" alt=""><div id="hud"></div></div>
+  <div id="panel">
+    <div>
+      <h1>LoRaWAN Propagation Study</h1>
+      <p class="sub">Configured for <b>US915</b> (902–928 MHz ISM, FCC Part 15.247).
+        Click the map to add gateways, or load a KMZ/KML of sites. The tool pulls
+        public terrain (AWS Terrarium DEM), runs a knife-edge diffraction path-loss
+        model from every gateway, and shades the combined (best-server) coverage.</p>
+    </div>
+
+    <div class="row" style="gap:6px">
+      <button class="sec modebtn active" id="modeGw" style="flex:1;padding:8px">📍 Add gateway</button>
+      <button class="sec modebtn" id="modeProf" style="flex:1;padding:8px">📈 Draw Profile</button>
+    </div>
+    <button id="runBtn">▶ Run study (all gateways)</button>
+    <div id="status">Click on the map to place a gateway.</div>
+
+    <fieldset>
+      <legend>Reliable Coverage Edge</legend>
+      <div class="row">
+        <input id="edgeSlider" type="range" min="-130" max="-60" step="10" value="-100" style="flex:1">
+        <span style="font-weight:700;font-size:18px;color:var(--slate);width:92px;text-align:right;flex:none"><span id="edgeVal">-100</span> dBm</span>
+      </div>
+    </fieldset>
+
+    <fieldset id="profBox" style="display:none">
+      <legend>Link profile</legend>
+      <canvas id="profCanvas" width="616" height="360"
+        style="width:100%;height:auto;background:var(--slate-dd);border-radius:6px"></canvas>
+      <div class="grid2" style="margin-top:8px">
+        <div class="readout"><div class="lbl">Distance</div><div class="big" id="pfDist" style="font-size:23px">—</div></div>
+        <div class="readout"><div class="lbl">Predicted SNR</div><div class="big" id="pfSnr" style="font-size:23px">—</div></div>
+      </div>
+      <div class="row" style="margin-top:6px"><span class="hint" id="pfNote"></span></div>
+    </fieldset>
+
+    <div class="grid2">
+      <div class="readout">
+        <div class="lbl">Coverage radius</div>
+        <div class="big" id="outRange">—</div>
+        <div class="lbl" id="outRangeNote">to threshold</div>
+      </div>
+      <div class="readout">
+        <div class="lbl">Ground elev.</div>
+        <div class="big" id="outElev">—</div>
+        <div class="lbl">at gateway</div>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Gateways</legend>
+      <div class="row" style="gap:8px">
+        <button class="sec" id="kmzBtn" style="flex:1">📂 Load KMZ / KML</button>
+        <button class="sec" id="rowBtn" style="width:auto;flex:none;padding:7px 11px;
+          font-size:13px;color:var(--muted)">Load ROW</button>
+        <input type="file" id="kmzFile" accept=".kmz,.kml" style="display:none">
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="sec" id="prevGw" style="width:52px;flex:none">◀</button>
+        <select id="gwSel" style="flex:1;width:auto;text-align:left"></select>
+        <button class="sec" id="nextGw" style="width:52px;flex:none">▶</button>
+      </div>
+      <div class="row">
+        <span class="hint" id="gwInfo">None yet — click the map or load a file.</span>
+        <button class="sec" id="delGw" style="width:auto;flex:none;padding:7px 12px">Remove</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Selected gateway</legend>
+      <div class="row"><label>Antenna height AGL</label>
+        <span><input id="txH" type="number" value="10" min="1" max="200" step="1"> m</span></div>
+      <div class="row"><label>TX power (EIRP-ish)</label>
+        <span><input id="txP" type="number" value="14" min="-10" max="36" step="1"> dBm</span></div>
+      <div class="row"><label>Gateway ant. gain</label>
+        <span><input id="txG" type="number" value="3" min="0" max="15" step="0.5"> dBi</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Node / receiver</legend>
+      <div class="row"><label>Node height AGL</label>
+        <span><input id="rxH" type="number" value="1.5" min="0.1" max="50" step="0.1"> m</span></div>
+      <div class="row"><label>Node ant. gain</label>
+        <span><input id="rxG" type="number" value="2" min="0" max="10" step="0.5"> dBi</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Radio &amp; threshold</legend>
+      <div class="row"><label>Frequency</label>
+        <span><input id="freq" type="number" value="915" min="100" max="2600" step="1"> MHz</span></div>
+      <div class="row"><label>Bandwidth</label>
+        <span><select id="bw">
+          <option value="125">125 kHz</option>
+          <option value="250">250 kHz</option>
+          <option value="500">500 kHz</option>
+        </select></span></div>
+      <div class="row"><label>Noise figure</label>
+        <span><input id="nf" type="number" value="6" min="0" max="15" step="0.5"> dB</span></div>
+      <div class="row"><label>SNR threshold</label>
+        <span><input id="thr" type="number" value="-20" min="-25" max="10" step="1"> dB</span></div>
+      <div class="row"><span class="hint">LoRa demod floor ≈ −7.5 (SF7) to −20 (SF12) dB SNR.</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Study area &amp; quality</legend>
+      <div class="row"><label>Max radius</label>
+        <span><input id="rad" type="number" value="15" min="1" max="60" step="1"> km</span></div>
+      <div class="row"><label>Radials</label>
+        <span><select id="radials">
+          <option value="90">90 (fast)</option>
+          <option value="180" selected>180</option>
+          <option value="360">360 (fine)</option>
+        </select></span></div>
+      <div class="row"><label>Use terrain</label>
+        <span><input id="useTerrain" type="checkbox" checked></span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Legend — predicted RSSI (dBm)</legend>
+      <div id="legend"></div>
+    </fieldset>
+
+    <div class="row" style="gap:8px">
+      <button class="sec" id="clearBtn">Clear overlay</button>
+      <button class="sec" id="resetBtn" style="color:#b3382c">↺ Reset all</button>
+    </div>
+
+    <p class="foot">
+      Model: free-space path loss + ITU-R P.526 single knife-edge diffraction over the
+      terrain profile, 4/3-earth curvature. SNR = RSSI − thermal noise floor
+      (−174 + 10·log₁₀(BW) + NF). Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">AWS Terrain Tiles</a>.
+      This is a planning estimate, not a guarantee — it ignores clutter (buildings,
+      foliage), multipath, and rain. Validate critical links in the field.
+    </p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+"use strict";
+
+/* ---------- constants ---------- */
+const C = 299792458;            // speed of light m/s
+const RE = 6371000;             // earth radius m
+const KFACTOR = 4/3;            // effective earth radius factor
+const TILE = 256;
+
+// RSSI contour rings (dBm) drawn around the gateway, inner=strong
+// Contour rings every 10 dB; colors assigned relative to the user-selected
+// coverage edge (heavy dark line at the edge, greens above, oranges below).
+let edgeLevel = -100;
+function ringsFor(E){
+  const rings=[];
+  for(let dbm=-60; dbm>=-130; dbm-=10){
+    const d=dbm-E;
+    let color, major=false;
+    if(d===0){ color='#27383a'; major=true; }
+    else if(d>=30) color='#1d8a45';
+    else if(d===20) color='#3fae62';
+    else if(d===10) color='#7cc98a';
+    else if(d===-10) color='#f0883e';
+    else if(d===-20) color='#ef5e43';
+    else color='#c22a23';
+    rings.push({dbm,color,major});
+  }
+  return rings;
+}
+let RINGS = ringsFor(edgeLevel);
+
+/* ---------- DOM helpers ---------- */
+const $ = id => document.getElementById(id);
+const num = id => parseFloat($(id).value);
+const status = msg => $('status').textContent = msg;
+
+/* ---------- map ---------- */
+const map = L.map('map', {zoomControl:true}).setView([43.5448, -80.2482], 12); // Guelph, ON
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '© OpenStreetMap'
+}).addTo(map);
+// optional terrain shading basemap toggle could go here
+
+let gwLatLng = null;             // latlng of the SELECTED gateway (profile source)
+let overlay = null;
+let rangeCircle = null;
+let contourLayer = null;
+let lastStudy = null;            // shared study params {nRad,nSteps,step,noiseFloor,thr,maxR}
+let lastBounds = null;           // union study bbox of the last run
+let mode = 'gateway';            // 'gateway' | 'profile'
+let lastTerrain = null;
+let lastTerrainBounds = null;
+let linkLine = null;
+let linkMarker = null;
+let obstMarker = null;
+
+/* ---------- multi-gateway model ---------- */
+let gateways = [];               // {id,name,lat,lng,marker,params:{txH,txP,txG},study}
+let selIdx = -1;
+let gwSeq = 0;
+
+function selGw(){ return selIdx>=0 ? gateways[selIdx] : null; }
+
+map.on('click', e => {
+  if(mode==='profile' && gwLatLng){
+    profileLink(e.latlng);
+  } else {
+    addGateway(e.latlng);
+    runStudy();
+  }
+});
+
+const gwIconSel = L.divIcon({className:'', iconSize:[38,38], iconAnchor:[19,19],
+  html:'<div class="gw-badge sel"><img src="brand/jasper-icon-cyan.svg" alt="gateway"></div>'});
+const gwIconUn = L.divIcon({className:'', iconSize:[27,27], iconAnchor:[13,13],
+  html:'<div class="gw-badge small"><img src="brand/jasper-icon-cyan.svg" alt="gateway"></div>'});
+
+function addGateway(latlng, name){
+  const gw = {id:++gwSeq, name:name||('GW '+gwSeq), lat:latlng.lat, lng:latlng.lng,
+    params:{txH:num('txH'), txP:num('txP'), txG:num('txG')}, study:null};
+  gw.marker = L.marker([gw.lat,gw.lng], {draggable:true, icon:gwIconUn, zIndexOffset:1100})
+    .addTo(map).bindTooltip(gw.name);
+  gw.marker.on('click', ()=>selectGw(gateways.indexOf(gw)));
+  gw.marker.on('dragend', ()=>{
+    const p=gw.marker.getLatLng(); gw.lat=p.lat; gw.lng=p.lng; gw.study=null;
+    if(gateways.indexOf(gw)===selIdx) gwLatLng=L.latLng(gw.lat,gw.lng);
+    runStudy();
+  });
+  gateways.push(gw);
+  selectGw(gateways.length-1);
+  return gw;
+}
+
+function selectGw(i){
+  if(i<0||i>=gateways.length) return;
+  selIdx=i;
+  const gw=gateways[i];
+  gwLatLng=L.latLng(gw.lat,gw.lng);
+  $('txH').value=gw.params.txH; $('txP').value=gw.params.txP; $('txG').value=gw.params.txG;
+  refreshGwUI();
+}
+
+function removeGw(i){
+  if(i<0||i>=gateways.length) return;
+  map.removeLayer(gateways[i].marker);
+  gateways.splice(i,1);
+  if(!gateways.length){ selIdx=-1; gwLatLng=null; refreshGwUI(); status('All gateways removed.'); return; }
+  selectGw(Math.min(i,gateways.length-1));
+  runStudy();
+}
+
+function refreshGwUI(){
+  const sel=$('gwSel'); sel.innerHTML='';
+  gateways.forEach((gw,i)=>{
+    const o=document.createElement('option');
+    o.value=i; o.textContent=gw.name; sel.appendChild(o);
+  });
+  if(selIdx>=0) sel.value=selIdx;
+  $('gwInfo').textContent = gateways.length
+    ? `${gateways.length} gateway${gateways.length>1?'s':''} — editing ${gateways[selIdx].name}`
+    : 'None yet — click the map or load a file.';
+  gateways.forEach((gw,i)=>gw.marker.setIcon(i===selIdx?gwIconSel:gwIconUn));
+}
+
+// param edits apply to the selected gateway
+['txH','txP','txG'].forEach(id=>{
+  $(id).addEventListener('input',()=>{ const gw=selGw(); if(gw) gw.params[id]=num(id); });
+});
+
+$('gwSel').onchange=e=>{ selectGw(+e.target.value); if(gwLatLng) map.panTo(gwLatLng); };
+$('prevGw').onclick=()=>{ if(gateways.length){ selectGw((selIdx-1+gateways.length)%gateways.length); map.panTo(gwLatLng); } };
+$('nextGw').onclick=()=>{ if(gateways.length){ selectGw((selIdx+1)%gateways.length); map.panTo(gwLatLng); } };
+$('delGw').onclick=()=>removeGw(selIdx);
+
+/* ---------- KMZ / KML import ---------- */
+function parseKmlPoints(text){
+  const doc=new DOMParser().parseFromString(text,'text/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('Invalid KML');
+  const out=[];
+  for(const pm of doc.getElementsByTagName('Placemark')){
+    const pt=pm.getElementsByTagName('Point')[0];
+    if(!pt) continue;                       // skip lines/polygons
+    const cc=pt.getElementsByTagName('coordinates')[0];
+    if(!cc) continue;
+    const [lon,lat]=cc.textContent.trim().split(/[,\s]+/).map(Number);
+    if(!isFinite(lat)||!isFinite(lon)) continue;
+    const nameEl=pm.getElementsByTagName('name')[0];
+    out.push({lat, lng:lon, name:nameEl?nameEl.textContent.trim():null});
+  }
+  return out;
+}
+
+async function importKmzBlob(blob, name){
+  let kmlText;
+  if(/\.kmz$/i.test(name)){
+    const zip=await JSZip.loadAsync(blob);
+    const entry=Object.values(zip.files).find(z=>/\.kml$/i.test(z.name) && !z.dir);
+    if(!entry) throw new Error('no .kml found inside the KMZ');
+    kmlText=await entry.async('text');
+  } else {
+    kmlText=await blob.text();
+  }
+  const pts=parseKmlPoints(kmlText);
+  if(!pts.length){ status('No point placemarks found in '+name+'.'); return; }
+  pts.forEach(p=>addGateway({lat:p.lat,lng:p.lng}, p.name));
+  map.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])).pad(0.35));
+  status(`Loaded ${pts.length} gateway${pts.length>1?'s':''} from ${name}. Running study…`);
+  runStudy();
+}
+
+$('kmzBtn').onclick=()=>$('kmzFile').click();
+$('kmzFile').onchange=async e=>{
+  const file=e.target.files[0]; e.target.value='';
+  if(!file) return;
+  try{ await importKmzBlob(file, file.name); }
+  catch(err){ console.error(err); status('Could not read '+file.name+': '+err.message); }
+};
+
+// hard-coded site file. Try the copy served next to the app first (stays
+// current if the file is replaced); fall back to this embedded snapshot so
+// the button also works when index.html is opened straight from disk
+// (file:// blocks fetch of local files).
+const ROW_KMZ='ROW_gateways.kmz';
+const ROW_KMZ_B64='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';
+function b64ToBlob(b64){
+  const bin=atob(b64);
+  const u8=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+  return new Blob([u8]);
+}
+$('rowBtn').onclick=async ()=>{
+  status('Loading '+ROW_KMZ+'…');
+  try{
+    const r=await fetch(ROW_KMZ);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    await importKmzBlob(await r.blob(), ROW_KMZ);
+    return;
+  }catch(err){ console.warn('Fetch failed ('+err.message+'); using embedded copy.'); }
+  try{
+    await importKmzBlob(b64ToBlob(ROW_KMZ_B64), ROW_KMZ);
+  }catch(err){ console.error(err); status('Could not load '+ROW_KMZ+': '+err.message); }
+};
+
+/* ---------- color map (quantized SNR bands, used by the hover HUD) ---------- */
+// stops as [snr_dB, [r,g,b]]
+const SNR_STOPS = [
+  [ 20, [ 0,104, 55]],
+  [ 10, [ 26,152, 80]],
+  [  0, [102,189, 99]],
+  [-10, [217,239,139]],
+  [-15, [254,224,139]],
+  [-20, [253,174, 97]],
+  [-25, [244,109, 67]],
+  [-30, [215, 48, 39]],
+  [-40, [165,  0, 38]],
+];
+function snrColor(snr){
+  if(snr >= SNR_STOPS[0][0]) return SNR_STOPS[0][1];
+  if(snr <= SNR_STOPS[SNR_STOPS.length-1][0]) return SNR_STOPS[SNR_STOPS.length-1][1];
+  for(let i=0;i<SNR_STOPS.length-1;i++){
+    const [a,ca]=SNR_STOPS[i], [b,cb]=SNR_STOPS[i+1];
+    if(snr<=a && snr>=b){
+      const t=(snr-b)/(a-b);
+      return [Math.round(cb[0]+(ca[0]-cb[0])*t),
+              Math.round(cb[1]+(ca[1]-cb[1])*t),
+              Math.round(cb[2]+(ca[2]-cb[2])*t)];
+    }
+  }
+  return [120,120,120];
+}
+
+/* ---------- RSSI color ramp (drives the shaded coverage areas) ---------- */
+// stops as [rssi_dBm, [r,g,b]], strong → weak.
+// Fill ramp is rebuilt around the coverage edge E: green family inside
+// (stronger than E), hard hue break to yellow/orange/red outside.
+function buildStops(E){
+  const T=-55, f=t=>T+(E-T)*t;
+  return [
+    [T,      [  0, 90, 50]],
+    [f(0.35),[ 22,140, 75]],
+    [f(0.65),[ 90,185,105]],
+    [f(0.88),[150,212,135]],
+    [E,      [196,232,178]],
+    [E-1,    [254,224,139]],
+    [E-8,    [253,174, 97]],
+    [E-16,   [244,109, 67]],
+    [E-26,   [215, 48, 39]],
+    [E-34,   [150,  0, 38]],
+  ];
+}
+let STOPS = buildStops(edgeLevel);
+function rssiColor(rssi){
+  const q=Math.round(rssi/3)*3;            // 3 dB iso bands for crisp areas
+  if(q>=STOPS[0][0]) return STOPS[0][1];
+  if(q<=STOPS[STOPS.length-1][0]) return STOPS[STOPS.length-1][1];
+  for(let i=0;i<STOPS.length-1;i++){
+    const [a,ca]=STOPS[i], [b,cb]=STOPS[i+1];
+    if(q<=a && q>=b){
+      const t=(q-b)/(a-b);
+      return [Math.round(cb[0]+(ca[0]-cb[0])*t),
+              Math.round(cb[1]+(ca[1]-cb[1])*t),
+              Math.round(cb[2]+(ca[2]-cb[2])*t)];
+    }
+  }
+  return [150,150,150];
+}
+function buildLegend(){
+  const el=$('legend'); el.innerHTML='';
+  const E=edgeLevel;
+  const bands=[
+    [E+32, `≥ ${E+30}  strong`],
+    [E+20, `${E+20}`],
+    [E+10, `${E+10}`],
+    [E+2,  `${E+2} … ${E}  edge`],
+    [E-4,  `${E} … ${E-8}`],
+    [E-12, `${E-12}`],
+    [E-22, `${E-22}`],
+    [E-32, `≤ ${E-30}  weak`],
+  ];
+  bands.forEach(([v,t])=>{
+    const c=rssiColor(v);
+    const row=document.createElement('div'); row.className='legend-row';
+    row.innerHTML=`<span class="swatch" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>
+      <span>${t} dBm</span>`;
+    el.appendChild(row);
+  });
+  const hdr=document.createElement('div');
+  hdr.style.cssText='font-size:12.5px;color:var(--muted);margin:9px 0 2px';
+  hdr.innerHTML=`Green = inside the <b>${E} dBm</b> coverage edge (heavy dark line). `+
+    'Thin outlines = other RSSI contours (labeled on map).';
+  el.appendChild(hdr);
+}
+buildLegend();
+
+/* ---------- geo helpers ---------- */
+const toRad = d => d*Math.PI/180;
+const toDeg = r => r*180/Math.PI;
+
+// destination point given start, bearing(rad), distance(m)
+function destPoint(lat, lon, brngRad, dist){
+  const dr = dist/RE;
+  const lat1 = toRad(lat), lon1 = toRad(lon);
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(dr) +
+               Math.cos(lat1)*Math.sin(dr)*Math.cos(brngRad));
+  const lon2 = lon1 + Math.atan2(Math.sin(brngRad)*Math.sin(dr)*Math.cos(lat1),
+               Math.cos(dr)-Math.sin(lat1)*Math.sin(lat2));
+  return [toDeg(lat2), toDeg(lon2)];
+}
+
+// initial bearing (rad) from point 1 to point 2
+function bearingTo(lat1,lon1,lat2,lon2){
+  const f1=toRad(lat1),f2=toRad(lat2),dl=toRad(lon2-lon1);
+  const y=Math.sin(dl)*Math.cos(f2);
+  const x=Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dl);
+  let b=Math.atan2(y,x); if(b<0)b+=2*Math.PI; return b;
+}
+// great-circle distance (m)
+function haversine(lat1,lon1,lat2,lon2){
+  const f1=toRad(lat1),f2=toRad(lat2),df=toRad(lat2-lat1),dl=toRad(lon2-lon1);
+  const a=Math.sin(df/2)**2+Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)**2;
+  return 2*RE*Math.asin(Math.sqrt(a));
+}
+
+/* ---------- terrain provider (AWS Terrarium tiles) ---------- */
+const TERRAIN_URL = z => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}`;
+
+function lonToTileX(lon,z){ return (lon+180)/360*Math.pow(2,z); }
+function latToTileY(lat,z){
+  const r=toRad(lat);
+  return (1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z);
+}
+
+async function loadTerrain(bounds, lat){
+  // choose zoom so ground sample distance is reasonable
+  const spanM = bounds.distM; // diagonal-ish radius in m
+  // GSD = 156543.03 * cos(lat)/2^z ; want ~ spanM/300 per pixel
+  const targetGsd = Math.max(15, spanM/350);
+  let z = Math.round(Math.log2(156543.03*Math.cos(toRad(lat))/targetGsd));
+  z = Math.max(8, Math.min(13, z));
+
+  let tx0 = Math.floor(lonToTileX(bounds.w, z));
+  let tx1 = Math.floor(lonToTileX(bounds.e, z));
+  let ty0 = Math.floor(latToTileY(bounds.n, z));
+  let ty1 = Math.floor(latToTileY(bounds.s, z));
+  // guard tile count
+  while((tx1-tx0+1)*(ty1-ty0+1) > 80 && z>8){
+    z--;
+    tx0=Math.floor(lonToTileX(bounds.w,z)); tx1=Math.floor(lonToTileX(bounds.e,z));
+    ty0=Math.floor(latToTileY(bounds.n,z)); ty1=Math.floor(latToTileY(bounds.s,z));
+  }
+  const nx=tx1-tx0+1, ny=ty1-ty0+1;
+  const cv=document.createElement('canvas');
+  cv.width=nx*TILE; cv.height=ny*TILE;
+  const ctx=cv.getContext('2d',{willReadFrequently:true});
+
+  const jobs=[];
+  let loaded=0, failed=0;
+  for(let tx=tx0;tx<=tx1;tx++){
+    for(let ty=ty0;ty<=ty1;ty++){
+      jobs.push(new Promise(res=>{
+        const img=new Image();
+        img.crossOrigin='anonymous';
+        img.onload=()=>{ ctx.drawImage(img,(tx-tx0)*TILE,(ty-ty0)*TILE); loaded++; res(); };
+        img.onerror=()=>{ failed++; res(); };
+        img.src=`${TERRAIN_URL(z)}/${tx}/${ty}.png`;
+      }));
+    }
+  }
+  status(`Loading ${jobs.length} terrain tiles (zoom ${z})…`);
+  await Promise.all(jobs);
+  if(loaded===0) return null;
+
+  const data=ctx.getImageData(0,0,cv.width,cv.height).data;
+  const W=cv.width;
+  const originX=tx0, originY=ty0, scale=Math.pow(2,z);
+
+  function elev(la,lo){
+    const gx=lonToTileX(lo,z)-originX; // in tiles
+    const gy=latToTileY(la,z)-originY;
+    let px=Math.floor(gx*TILE), py=Math.floor(gy*TILE);
+    if(px<0)px=0; if(py<0)py=0;
+    if(px>=cv.width)px=cv.width-1; if(py>=cv.height)py=cv.height-1;
+    const i=(py*W+px)*4;
+    const R=data[i],G=data[i+1],B=data[i+2];
+    if(R===0&&G===0&&B===0&&data[i+3]===0) return 0; // unpainted
+    return (R*256 + G + B/256) - 32768;
+  }
+  return {elev, zoom:z, failed, loaded};
+}
+
+/* ---------- propagation core ---------- */
+function knifeEdgeLoss(v){
+  // ITU-R P.526 approximation
+  if(v <= -0.78) return 0;
+  return 6.9 + 20*Math.log10(Math.sqrt((v-0.1)*(v-0.1)+1) + v - 0.1);
+}
+
+function runStudy(){
+  if(!gateways.length){ status('Click on the map or load a KMZ to add gateways first.'); return; }
+  $('runBtn').disabled=true;
+  setTimeout(()=>compute().catch(err=>{
+    console.error(err); status('Error: '+err.message);
+    $('runBtn').disabled=false;
+  }),20);
+}
+
+async function compute(){
+  const rxH=num('rxH'), rxG=num('rxG');
+  const f=num('freq'), bw=num('bw'), nf=num('nf'), thr=num('thr');
+  const maxR=num('rad')*1000;
+  const nRad=parseInt($('radials').value,10);
+  const useTerrain=$('useTerrain').checked;
+
+  const lambda=C/(f*1e6);
+  const noiseFloor=-174 + 10*Math.log10(bw*1000) + nf; // dBm
+
+  // union study bbox over all gateways
+  let n=-90,s=90,e=-180,w=180;
+  for(const gw of gateways){
+    const [nLat]=destPoint(gw.lat,gw.lng,0,maxR);
+    const [sLat]=destPoint(gw.lat,gw.lng,Math.PI,maxR);
+    const [,eLon]=destPoint(gw.lat,gw.lng,Math.PI/2,maxR);
+    const [,wLon]=destPoint(gw.lat,gw.lng,-Math.PI/2,maxR);
+    n=Math.max(n,nLat); s=Math.min(s,sLat); e=Math.max(e,eLon); w=Math.min(w,wLon);
+  }
+  const bounds={n,s,e,w,distM:maxR};
+
+  // terrain (one load covering all gateways)
+  let terrain=null;
+  if(useTerrain){
+    terrain=await loadTerrain(bounds,(n+s)/2);
+    if(!terrain){ status('Terrain unavailable — falling back to flat earth.'); }
+  }
+  lastTerrain=terrain; lastTerrainBounds=bounds; lastBounds=bounds;
+  const elevAt=(la,lo)=> terrain ? terrain.elev(la,lo) : 0;
+
+  // distance sampling (shared by all gateways)
+  const step=Math.max(30, maxR/200);
+  const nSteps=Math.floor(maxR/step);
+  lastStudy={nRad,nSteps,step,noiseFloor,thr,maxR:nSteps*step};
+
+  let maxRangeToThr=0;
+  for(let gi=0; gi<gateways.length; gi++){
+    const gw=gateways[gi];
+    status(`Computing path loss — ${gw.name} (${gi+1}/${gateways.length})…`);
+    await new Promise(r=>setTimeout(r,0));
+    const eirp=gw.params.txP+gw.params.txG;
+    const z0=elevAt(gw.lat,gw.lng);
+    const txAbs=z0+gw.params.txH;
+
+    // polar grid of SNR  [radial][ring]
+    const grid=new Float32Array(nRad*nSteps);
+    let rangeToThr=0;
+    for(let a=0;a<nRad;a++){
+      const brng=a/nRad*2*Math.PI;
+      const prof=new Float32Array(nSteps+1);
+      const dist=new Float32Array(nSteps+1);
+      prof[0]=z0; dist[0]=0;
+      for(let i=1;i<=nSteps;i++){
+        const d=i*step;
+        const [la,lo]=destPoint(gw.lat,gw.lng,brng,d);
+        prof[i]=elevAt(la,lo);
+        dist[i]=d;
+      }
+      let radialThr=0;
+      for(let i=1;i<=nSteps;i++){
+        const d=dist[i];
+        const rxAbs=prof[i]+rxH;
+        // worst-case Fresnel parameter along profile (single knife edge)
+        let vmax=-Infinity;
+        for(let j=1;j<i;j++){
+          const d1=dist[j], d2=d-d1;
+          if(d2<=0) continue;
+          const losH=txAbs + (rxAbs-txAbs)*(d1/d);
+          const bulge=d1*d2/(2*KFACTOR*RE);
+          const h=(prof[j]+bulge)-losH; // obstruction above LOS
+          const v=h*Math.sqrt(2*d/(lambda*d1*d2));
+          if(v>vmax) vmax=v;
+        }
+        const diff = vmax===-Infinity ? 0 : knifeEdgeLoss(vmax);
+        const fspl = 20*Math.log10(d) + 20*Math.log10(f*1e6) - 147.55; // d in m
+        const rssi = eirp + rxG - fspl - diff;
+        const snr  = rssi - noiseFloor;
+        grid[a*nSteps + (i-1)] = snr;
+        if(snr>=thr) radialThr=d;
+      }
+      if(radialThr>rangeToThr) rangeToThr=radialThr;
+    }
+    gw.study={grid,z0,rangeToThr};
+    if(rangeToThr>maxRangeToThr) maxRangeToThr=rangeToThr;
+  }
+
+  status('Rendering composite coverage…');
+  await new Promise(r=>setTimeout(r,0));
+  renderComposite(bounds);
+
+  // readouts
+  $('outRange').textContent = (maxRangeToThr/1000).toFixed(1)+' km';
+  $('outRangeNote').textContent = `max, SNR ≥ ${thr} dB`;
+  const sg=selGw();
+  $('outElev').textContent = sg&&sg.study ? Math.round(sg.study.z0)+' m' : '—';
+  status(`Done — ${gateways.length} gateway${gateways.length>1?'s':''} (best-server composite). `+
+    `Noise floor ${noiseFloor.toFixed(1)} dBm`+(terrain?` · DEM z${terrain.zoom}`:' · flat earth')+'.');
+  $('runBtn').disabled=false;
+}
+
+/* ---------- bilinear sample of one polar grid ---------- */
+function sampleGrid(g,S,brng,d){
+  const af=brng/(2*Math.PI)*S.nRad, rf=d/S.step-1;
+  let a0=Math.floor(af)%S.nRad; if(a0<0)a0+=S.nRad; const a1=(a0+1)%S.nRad;
+  let r0=Math.floor(rf); if(r0<0)r0=0; if(r0>S.nSteps-1)r0=S.nSteps-1;
+  const r1=Math.min(r0+1,S.nSteps-1);
+  const ta=af-Math.floor(af), tr=rf-Math.floor(rf);
+  const g00=g[a0*S.nSteps+r0],g01=g[a0*S.nSteps+r1],g10=g[a1*S.nSteps+r0],g11=g[a1*S.nSteps+r1];
+  return (g00*(1-tr)+g01*tr)*(1-ta)+(g10*(1-tr)+g11*tr)*ta;
+}
+
+/* ---------- best-server sample across all gateways ---------- */
+function sampleStudy(latlng){
+  const S=lastStudy; if(!S) return null;
+  let best=null;
+  for(const gw of gateways){
+    if(!gw.study) continue;
+    const dx=toRad(latlng.lng-gw.lng)*Math.cos(toRad(gw.lat))*RE;
+    const dy=toRad(latlng.lat-gw.lat)*RE;
+    const d=Math.hypot(dx,dy);
+    if(d>S.maxR) continue;
+    let brng=Math.atan2(dx,dy); if(brng<0)brng+=2*Math.PI;
+    const snr=sampleGrid(gw.study.grid,S,brng,d);
+    if(!best || snr>best.snr) best={d, snr, rssi:snr+S.noiseFloor, via:gw.name};
+  }
+  return best;
+}
+
+/* ---------- composite (best-server) coverage renderer ----------
+   Samples every gateway's polar grid per pixel and keeps the max RSSI, so
+   overlapping cells merge into one "is there coverage" field. Iso-lines are
+   extracted from the composite field with marching squares and drawn as
+   vector polylines, which stay crisp at any zoom and handle merged shapes. */
+
+// marching squares: segments of the `lvl` iso-line in grid (pixel) coords.
+// Cells touching uncovered pixels are skipped so the study boundary never
+// reads as a contour.
+function contourSegments(buf,W,H,lvl){
+  const segs=[];
+  for(let y=0;y<H-1;y++){
+    for(let x=0;x<W-1;x++){
+      const i=y*W+x;
+      const tl=buf[i], tr=buf[i+1], bl=buf[i+W], br=buf[i+W+1];
+      if(tl<-900||tr<-900||bl<-900||br<-900) continue;
+      let idx=0;
+      if(tl>=lvl)idx|=8; if(tr>=lvl)idx|=4; if(br>=lvl)idx|=2; if(bl>=lvl)idx|=1;
+      if(idx===0||idx===15) continue;
+      const t=(a,b)=>(lvl-a)/(b-a);
+      const top=[x+t(tl,tr),y], right=[x+1,y+t(tr,br)],
+            bottom=[x+t(bl,br),y+1], left=[x,y+t(tl,bl)];
+      switch(idx){
+        case 1: case 14: segs.push([left,bottom]); break;
+        case 2: case 13: segs.push([bottom,right]); break;
+        case 3: case 12: segs.push([left,right]); break;
+        case 4: case 11: segs.push([top,right]); break;
+        case 6: case 9:  segs.push([top,bottom]); break;
+        case 7: case 8:  segs.push([left,top]); break;
+        case 5:  segs.push([left,top],[bottom,right]); break;
+        case 10: segs.push([left,bottom],[top,right]); break;
+      }
+    }
+  }
+  return segs;
+}
+
+// 3x3 mean filter over covered cells — the iso-lines are extracted from this
+// smoothed copy so single-pixel terrain speckle doesn't shred the contours
+// (the fill keeps the full-resolution field)
+function smoothField(buf,W,H){
+  const out=new Float32Array(W*H);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const i=y*W+x;
+      if(buf[i]<-900){ out[i]=buf[i]; continue; }
+      let s=0,n=0;
+      for(let dy=-1;dy<=1;dy++){
+        const yy=y+dy; if(yy<0||yy>=H) continue;
+        for(let dx=-1;dx<=1;dx++){
+          const xx=x+dx; if(xx<0||xx>=W) continue;
+          const v=buf[yy*W+xx];
+          if(v>-900){ s+=v; n++; }
+        }
+      }
+      out[i]=s/n;
+    }
+  }
+  return out;
+}
+
+// chain raw segments into polylines by matching endpoints
+function chainSegments(segs){
+  const key=p=>((p[0]*8)|0)+'_'+((p[1]*8)|0);
+  const at=new Map();
+  segs.forEach((s,i)=>{
+    for(const k of [key(s[0]),key(s[1])]){
+      if(!at.has(k)) at.set(k,[]);
+      at.get(k).push(i);
+    }
+  });
+  const used=new Array(segs.length).fill(false);
+  const lines=[];
+  const grow=(line,fromHead)=>{
+    for(;;){
+      const end=fromHead?line[0]:line[line.length-1];
+      const k=key(end);
+      let found=false;
+      for(const j of at.get(k)||[]){
+        if(used[j]) continue;
+        const s=segs[j];
+        const nxt = key(s[0])===k ? s[1] : (key(s[1])===k ? s[0] : null);
+        if(!nxt) continue;
+        used[j]=true;
+        if(fromHead) line.unshift(nxt); else line.push(nxt);
+        found=true; break;
+      }
+      if(!found) return;
+    }
+  };
+  for(let i=0;i<segs.length;i++){
+    if(used[i]) continue;
+    used[i]=true;
+    const line=[segs[i][0],segs[i][1]];
+    grow(line,false); grow(line,true);
+    if(line.length<6) continue;            // drop speckle fragments
+    let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+    for(const p of line){
+      if(p[0]<minx)minx=p[0]; if(p[0]>maxx)maxx=p[0];
+      if(p[1]<miny)miny=p[1]; if(p[1]>maxy)maxy=p[1];
+    }
+    if((maxx-minx)+(maxy-miny)>=18) lines.push(line); // and small islands
+  }
+  return lines;
+}
+
+const contourRenderer = L.canvas({padding:0.3});
+
+function renderComposite(bounds){
+  const S=lastStudy;
+  const midLat=(bounds.n+bounds.s)/2;
+  const lonSpanM=toRad(bounds.e-bounds.w)*Math.cos(toRad(midLat))*RE;
+  const latSpanM=toRad(bounds.n-bounds.s)*RE;
+  const W=860;
+  let H=Math.round(W*latSpanM/lonSpanM); H=Math.max(160,Math.min(1600,H));
+
+  // pass 1: best-server RSSI field
+  const buf=new Float32Array(W*H).fill(-9999);
+  const edge=new Float32Array(W*H).fill(1);
+  const gws=gateways.filter(g=>g.study);
+  const cosArr=gws.map(g=>Math.cos(toRad(g.lat)));
+  for(let y=0;y<H;y++){
+    const la=bounds.n+(bounds.s-bounds.n)*(y/(H-1));
+    for(let x=0;x<W;x++){
+      const lo=bounds.w+(bounds.e-bounds.w)*(x/(W-1));
+      let best=-9999,bestEdge=1;
+      for(let k=0;k<gws.length;k++){
+        const gw=gws[k];
+        const dx=toRad(lo-gw.lng)*cosArr[k]*RE;
+        const dy=toRad(la-gw.lat)*RE;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d>S.maxR) continue;
+        let brng=Math.atan2(dx,dy); if(brng<0)brng+=2*Math.PI;
+        const rssi=sampleGrid(gw.study.grid,S,brng,d)+S.noiseFloor;
+        if(rssi>best){ best=rssi; bestEdge=d/S.maxR; }
+      }
+      const i=y*W+x;
+      buf[i]=best; edge[i]=bestEdge;
+    }
+  }
+
+  // pass 2: paint fill
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  const img=ctx.createImageData(W,H);
+  const px=img.data;
+  for(let i=0;i<W*H;i++){
+    const v=buf[i], o=i*4;
+    if(v<-138){ px[o+3]=0; continue; }
+    const c=rssiColor(v);
+    px[o]=c[0]; px[o+1]=c[1]; px[o+2]=c[2];
+    // fade near the study boundary so the edge isn't a hard circle
+    const ef=edge[i];
+    px[o+3]= ef>0.92 ? Math.round(150*(1-(ef-0.92)/0.08)) : 150;
+  }
+
+  ctx.putImageData(img,0,0);
+
+  if(overlay) map.removeLayer(overlay);
+  overlay=L.imageOverlay(cv.toDataURL(),[[bounds.s,bounds.w],[bounds.n,bounds.e]],
+    {opacity:0.8,interactive:false}).addTo(map);
+
+  // pass 3: vector iso-lines from the composite field
+  if(contourLayer) map.removeLayer(contourLayer);
+  contourLayer=L.layerGroup().addTo(map);
+  const toLL=p=>[bounds.n+(bounds.s-bounds.n)*(p[1]/(H-1)),
+                 bounds.w+(bounds.e-bounds.w)*(p[0]/(W-1))];
+  let sm=smoothField(buf,W,H); sm=smoothField(sm,W,H);
+  for(const ring of RINGS){
+    const lines=chainSegments(contourSegments(sm,W,H,ring.dbm));
+    if(!lines.length) continue;
+    const w=ring.major?5:2.5;
+    let labelPt=null,bestX=-1;
+    for(const line of lines){
+      const ll=line.map(toLL);
+      // white casing on the major edge so it pops over any fill
+      if(ring.major){
+        L.polyline(ll,{renderer:contourRenderer,color:'#ffffff',weight:w+3,
+          opacity:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'})
+          .addTo(contourLayer);
+      }
+      L.polyline(ll,{renderer:contourRenderer,color:ring.color,weight:w,
+        opacity:ring.major?1:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'})
+        .addTo(contourLayer);
+      for(const p of line) if(p[0]>bestX){ bestX=p[0]; labelPt=p; }
+    }
+    if(labelPt){
+      L.marker(toLL(labelPt),{interactive:false,zIndexOffset:1000,icon:L.divIcon({className:'',html:
+        `<div style="background:${ring.color};color:${ring.major?'#fff':'#04101f'};font:800 13px/1 system-ui;`+
+        `padding:4px 9px;border-radius:10px;white-space:nowrap;border:2px solid #fff;`+
+        `transform:translate(7px,-50%);box-shadow:0 2px 6px rgba(0,0,0,.6)">`+
+        `${ring.dbm} dBm</div>`, iconSize:[0,0]})}).addTo(contourLayer);
+    }
+  }
+}
+
+/* ---------- link terrain profile ---------- */
+function inBounds(b,la,lo){ return b && la<=b.n && la>=b.s && lo<=b.e && lo>=b.w; }
+
+async function profileLink(target){
+  const lat0=gwLatLng.lat, lon0=gwLatLng.lng;
+  const lat1=target.lat, lon1=target.lng;
+  const D=haversine(lat0,lon0,lat1,lon1);
+  if(D<50){ status('Pick a point further from the gateway.'); return; }
+  const useTerrain=$('useTerrain').checked;
+
+  // draw link line on map
+  if(linkLine) map.removeLayer(linkLine);
+  if(linkMarker) map.removeLayer(linkMarker);
+  linkLine=L.polyline([[lat0,lon0],[lat1,lon1]],{color:'#2f8f8b',weight:2}).addTo(map);
+  linkMarker=L.circleMarker([lat1,lon1],{radius:5,color:'#fff',fillColor:'#2f8f8b',
+    fillOpacity:1,weight:2}).addTo(map);
+
+  // terrain: reuse study terrain if it covers both ends, else fetch a corridor
+  let terrain=null;
+  if(useTerrain){
+    if(lastTerrain && inBounds(lastTerrainBounds,lat1,lon1)){
+      terrain=lastTerrain;
+    } else {
+      const mLat=Math.max(Math.abs(lat1-lat0),0.01), mLon=Math.max(Math.abs(lon1-lon0),0.01);
+      const b={n:Math.max(lat0,lat1)+mLat*0.1, s:Math.min(lat0,lat1)-mLat*0.1,
+               e:Math.max(lon0,lon1)+mLon*0.1, w:Math.min(lon0,lon1)-mLon*0.1, distM:D};
+      terrain=await loadTerrain(b,(lat0+lat1)/2);
+    }
+  }
+  const elevAt=(la,lo)=> terrain ? terrain.elev(la,lo) : 0;
+
+  // sample along great circle
+  const N=300;
+  const brng=bearingTo(lat0,lon0,lat1,lon1);
+  const dist=new Float64Array(N+1), ground=new Float64Array(N+1);
+  for(let i=0;i<=N;i++){
+    const d=D*i/N; dist[i]=d;
+    const [la,lo]=destPoint(lat0,lon0,brng,d);
+    ground[i]=elevAt(la,lo);
+  }
+
+  const obst=drawProfile(dist,ground,D);
+
+  // drop / move the obstruction pin on the map
+  if(obstMarker){ map.removeLayer(obstMarker); obstMarker=null; }
+  if(obst){
+    const [ola,olo]=destPoint(lat0,lon0,brng,obst.distM);
+    obstMarker=L.marker([ola,olo],{
+      icon:L.divIcon({className:'',html:
+        '<div style="background:#f85149;color:#fff;font:600 10px system-ui;'+
+        'padding:2px 6px;border-radius:10px;white-space:nowrap;transform:translate(-50%,-140%);'+
+        'box-shadow:0 1px 4px rgba(0,0,0,.5)">⛰ ridge '+Math.round(obst.elev)+'m</div>',
+      iconSize:[0,0]})
+    }).addTo(map);
+  }
+}
+
+function drawProfile(dist,ground,D){
+  const txH=num('txH'), rxH=num('rxH'), f=num('freq'), bw=num('bw'), nf=num('nf'), thr=num('thr');
+  const txP=num('txP'), txG=num('txG'), rxG=num('rxG');
+  const lambda=C/(f*1e6);
+  const noiseFloor=-174 + 10*Math.log10(bw*1000) + nf;
+  const N=dist.length-1;
+  const txAbs=ground[0]+txH, rxAbs=ground[N]+rxH;
+
+  // terrain incl. 4/3-earth bulge so LOS plots straight
+  const terr=new Float64Array(N+1);
+  for(let i=0;i<=N;i++){
+    const d1=dist[i], d2=D-d1;
+    terr[i]=ground[i] + d1*d2/(2*KFACTOR*RE);
+  }
+
+  // LOS, Fresnel, worst knife edge
+  let vmax=-Infinity, vIdx=-1, minClearFrac=Infinity;
+  const losH=new Float64Array(N+1), f1=new Float64Array(N+1);
+  for(let i=0;i<=N;i++){
+    const d1=dist[i], d2=D-d1;
+    losH[i]=txAbs+(rxAbs-txAbs)*(d1/D);
+    f1[i]= (d1>0&&d2>0)? Math.sqrt(lambda*d1*d2/D) : 0;
+    if(i>0 && i<N){
+      const h=terr[i]-losH[i];
+      const v=h*Math.sqrt(2*D/(lambda*d1*d2));
+      if(v>vmax){vmax=v;vIdx=i;}
+      const frac=f1[i]>0 ? (losH[i]-terr[i])/f1[i] : Infinity; // >0.6 = clear
+      if(frac<minClearFrac)minClearFrac=frac;
+    }
+  }
+  const diff=vmax===-Infinity?0:knifeEdgeLoss(vmax);
+  const fspl=20*Math.log10(D)+20*Math.log10(f*1e6)-147.55;
+  const rssi=txP+txG+rxG-fspl-diff;
+  const snr=rssi-noiseFloor;
+
+  // ----- draw -----
+  const cv=$('profCanvas'), ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const ML=46,MR=12,MT=14,MB=30;
+  const px=d=> ML + (d/D)*(W-ML-MR);
+  let yMin=Infinity,yMax=-Infinity;
+  for(let i=0;i<=N;i++){
+    yMin=Math.min(yMin,terr[i],losH[i]-f1[i]);
+    yMax=Math.max(yMax,terr[i],losH[i]+f1[i],txAbs,rxAbs);
+  }
+  const pad=(yMax-yMin)*0.08||10; yMin-=pad; yMax+=pad;
+  const py=v=> MT + (1-(v-yMin)/(yMax-yMin))*(H-MT-MB);
+
+  // grid + axes
+  ctx.strokeStyle='rgba(255,255,255,.13)'; ctx.fillStyle='#9fb3b3';
+  ctx.font='11px system-ui'; ctx.lineWidth=1;
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let g=0;g<=4;g++){
+    const v=yMin+(yMax-yMin)*g/4, y=py(v);
+    ctx.beginPath();ctx.moveTo(ML,y);ctx.lineTo(W-MR,y);ctx.stroke();
+    ctx.fillText(Math.round(v)+'m', ML-5, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let g=0;g<=4;g++){
+    const d=D*g/4, x=px(d);
+    ctx.fillText((d/1000).toFixed(d<2000?2:1)+'km', x, H-MB+6);
+  }
+
+  // Fresnel zone (filled ellipse band)
+  ctx.beginPath();
+  for(let i=0;i<=N;i++) ctx.lineTo(px(dist[i]),py(losH[i]+f1[i]));
+  for(let i=N;i>=0;i--) ctx.lineTo(px(dist[i]),py(losH[i]-f1[i]));
+  ctx.closePath(); ctx.fillStyle='rgba(94,197,194,0.14)'; ctx.fill();
+  // 0.6 F1 lower bound (clearance criterion)
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){const x=px(dist[i]),y=py(losH[i]-0.6*f1[i]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.strokeStyle='rgba(94,197,194,0.6)';ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+
+  // LOS ray
+  ctx.beginPath();ctx.moveTo(px(0),py(txAbs));ctx.lineTo(px(D),py(rxAbs));
+  ctx.strokeStyle = minClearFrac>=0.6 ? '#3fb950' : '#d29922';
+  ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+
+  // terrain fill
+  ctx.beginPath();ctx.moveTo(px(0),py(yMin));
+  for(let i=0;i<=N;i++)ctx.lineTo(px(dist[i]),py(terr[i]));
+  ctx.lineTo(px(D),py(yMin));ctx.closePath();
+  ctx.fillStyle='#5a4632';ctx.fill();
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){const x=px(dist[i]),y=py(terr[i]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.strokeStyle='#8a6d4d';ctx.stroke();
+
+  // antenna masts
+  ctx.strokeStyle='#e6edf3';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(px(0),py(ground[0]));ctx.lineTo(px(0),py(txAbs));ctx.stroke();
+  ctx.beginPath();ctx.moveTo(px(D),py(ground[N]));ctx.lineTo(px(D),py(rxAbs));ctx.stroke();
+  ctx.fillStyle='#2f8f8b';
+  ctx.beginPath();ctx.arc(px(0),py(txAbs),4,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(px(D),py(rxAbs),4,0,7);ctx.fill();
+
+  // worst obstruction callout (only when it actually diffracts)
+  let obst=null;
+  if(vmax>-0.78 && vIdx>0){
+    const ox=px(dist[vIdx]), oTop=py(terr[vIdx]), oLos=py(losH[vIdx]);
+    ctx.strokeStyle='#f85149';ctx.setLineDash([2,2]);ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(ox,oTop);ctx.lineTo(ox,oLos);ctx.stroke();
+    ctx.setLineDash([]);ctx.lineWidth=1;
+    ctx.fillStyle='#f85149';
+    ctx.beginPath();ctx.moveTo(ox,oTop-2);ctx.lineTo(ox-5,oTop-10);ctx.lineTo(ox+5,oTop-10);
+    ctx.closePath();ctx.fill();
+    // label
+    ctx.font='10px system-ui';ctx.textBaseline='bottom';
+    ctx.textAlign = ox> (ML+(W-MR))/2 ? 'right':'left';
+    const lx = ctx.textAlign==='right'? ox-7 : ox+7;
+    ctx.fillStyle='#f85149';
+    ctx.fillText('ridge '+Math.round(ground[vIdx])+'m', lx, oTop-2);
+    obst={dist:dist[vIdx], elev:ground[vIdx], intrude:terr[vIdx]-losH[vIdx], frac:minClearFrac};
+  }
+
+  // readouts
+  $('profBox').style.display='block';
+  $('pfDist').textContent=(D/1000).toFixed(2)+' km';
+  $('pfSnr').textContent=snr.toFixed(1)+' dB';
+  $('pfSnr').style.color = snr>=thr ? 'var(--good)' : 'var(--warn)';
+  const clearTxt = minClearFrac>=0.6 ? 'LOS clear (>0.6 F1)'
+    : minClearFrac>=0 ? 'grazing (LOS clear, Fresnel intrusion)'
+    : 'obstructed';
+  let obstTxt='';
+  if(obst){
+    const how = obst.intrude>0 ? `${obst.intrude.toFixed(0)} m above LOS`
+              : `${(-obst.intrude).toFixed(0)} m below LOS, into Fresnel`;
+    obstTxt=`<br><b style="color:#f85149">Worst obstruction:</b> ridge at `+
+      `${(obst.dist/1000).toFixed(2)} km (${Math.round(obst.elev)} m), ${how} — costs ${diff.toFixed(1)} dB.`;
+  }
+  $('pfNote').innerHTML=
+    `RSSI ${rssi.toFixed(1)} dBm · FSPL ${fspl.toFixed(1)} dB · diffraction ${diff.toFixed(1)} dB · `+
+    `${clearTxt} · ${snr>=thr?'<b style="color:var(--good)">link viable</b>':'<b style="color:var(--warn)">below threshold</b>'}`+
+    obstTxt;
+  status(`Profile: ${(D/1000).toFixed(2)} km, SNR ${snr.toFixed(1)} dB.`);
+  return obst ? {fracDist: obst.dist/D, elev:obst.elev, distM:obst.dist} : null;
+}
+
+/* ---------- mode toggle ---------- */
+function setMode(m){
+  mode=m;
+  $('modeGw').classList.toggle('active', m==='gateway');
+  $('modeProf').classList.toggle('active', m==='profile');
+  if(m==='profile'){
+    status(gwLatLng? 'Click a point to profile the link from the selected gateway.'
+                   : 'Place a gateway first, then click to profile.');
+  } else {
+    status('Click the map to add a gateway (drag markers to move them).');
+  }
+}
+$('modeGw').onclick=()=>setMode('gateway');
+$('modeProf').onclick=()=>setMode('profile');
+
+/* ---------- live hover readout ---------- */
+const hud=$('hud');
+map.on('mousemove', e=>{
+  const s=sampleStudy(e.latlng);
+  if(!s){ hud.style.display='none'; return; }
+  const c=rssiColor(s.rssi);
+  const above = lastStudy && s.snr>=lastStudy.thr;
+  let elev='—';
+  if(lastTerrain && inBounds(lastTerrainBounds,e.latlng.lat,e.latlng.lng))
+    elev=Math.round(lastTerrain.elev(e.latlng.lat,e.latlng.lng))+' m';
+  hud.style.borderLeftColor=`rgb(${c[0]},${c[1]},${c[2]})`;
+  hud.style.display='block';
+  hud.innerHTML=
+    `<div class="v">${s.rssi.toFixed(1)} <span class="m">dBm RSSI</span></div>`+
+    `<div class="m">SNR ${s.snr.toFixed(1)} dB · `+
+    `<b style="color:${above?'var(--good)':'var(--warn)'}">${above?'in coverage':'below thr'}</b></div>`+
+    `<div class="m">${(s.d/1000).toFixed(2)} km from ${s.via} · terrain ${elev}</div>`;
+});
+map.on('mouseout', ()=>{ hud.style.display='none'; });
+
+/* ---------- buttons ---------- */
+$('runBtn').onclick=()=>runStudy();
+$('resetBtn').onclick=()=>location.reload();
+
+/* ---------- coverage-edge slider ---------- */
+$('edgeSlider').addEventListener('input',()=>{       // live label + legend
+  edgeLevel=+$('edgeSlider').value;
+  $('edgeVal').textContent=edgeLevel;
+  STOPS=buildStops(edgeLevel);
+  RINGS=ringsFor(edgeLevel);
+  buildLegend();
+});
+$('edgeSlider').addEventListener('change',()=>{      // re-render on release
+  if(lastStudy && lastBounds && gateways.some(g=>g.study)){
+    status(`Re-rendering at ${edgeLevel} dBm edge…`);
+    setTimeout(()=>{ renderComposite(lastBounds);
+      status(`Coverage edge set to ${edgeLevel} dBm.`); },20);
+  }
+});
+$('clearBtn').onclick=()=>{
+  if(overlay){map.removeLayer(overlay);overlay=null;}
+  if(rangeCircle){map.removeLayer(rangeCircle);rangeCircle=null;}
+  if(contourLayer){map.removeLayer(contourLayer);contourLayer=null;}
+  if(linkLine){map.removeLayer(linkLine);linkLine=null;}
+  if(linkMarker){map.removeLayer(linkMarker);linkMarker=null;}
+  if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
+  lastStudy=null; hud.style.display='none';
+  $('profBox').style.display='none';
+  $('outRange').textContent='—'; $('outElev').textContent='—';
+  status('Overlay cleared.');
+};
+</script>
+</body>
+</html>

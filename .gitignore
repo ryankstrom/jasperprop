@@ -1,0 +1,5 @@
+.DS_Store
+.claude/
+# brand deck source material — the app only needs the SVG logos
+brand/jasper-deck.pdf
+brand/page-*.png
