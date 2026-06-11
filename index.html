@@ -139,19 +139,6 @@
       <div class="row" style="margin-top:6px"><span class="hint" id="pfNote"></span></div>
     </fieldset>
 
-    <div class="grid2">
-      <div class="readout">
-        <div class="lbl">Coverage radius</div>
-        <div class="big" id="outRange">—</div>
-        <div class="lbl" id="outRangeNote">to threshold</div>
-      </div>
-      <div class="readout">
-        <div class="lbl">Ground elev.</div>
-        <div class="big" id="outElev">—</div>
-        <div class="lbl">at gateway</div>
-      </div>
-    </div>
-
     <fieldset>
       <legend>Gateways</legend>
       <div class="row" style="gap:8px">
@@ -179,6 +166,8 @@
         <span><input id="txP" type="number" value="14" min="-10" max="36" step="1"> dBm</span></div>
       <div class="row"><label>Gateway ant. gain</label>
         <span><input id="txG" type="number" value="3" min="0" max="15" step="0.5"> dBi</span></div>
+      <div class="row"><label>Ground elevation</label>
+        <span id="gwElev" style="font-weight:600;color:var(--muted)">—</span></div>
     </fieldset>
 
     <fieldset>
@@ -342,6 +331,12 @@ function selectGw(i){
   gwLatLng=L.latLng(gw.lat,gw.lng);
   $('txH').value=gw.params.txH; $('txP').value=gw.params.txP; $('txG').value=gw.params.txG;
   refreshGwUI();
+  updateElevReadout();
+}
+
+function updateElevReadout(){
+  const sg=selGw();
+  $('gwElev').textContent = sg&&sg.study ? Math.round(sg.study.z0)+' m' : '—';
 }
 
 function removeGw(i){
@@ -683,7 +678,6 @@ async function compute(){
   const nSteps=Math.floor(maxR/step);
   lastStudy={nRad,nSteps,step,noiseFloor,thr,maxR:nSteps*step};
 
-  let maxRangeToThr=0;
   for(let gi=0; gi<gateways.length; gi++){
     const gw=gateways[gi];
     status(`Computing path loss — ${gw.name} (${gi+1}/${gateways.length})…`);
@@ -731,18 +725,13 @@ async function compute(){
       if(radialThr>rangeToThr) rangeToThr=radialThr;
     }
     gw.study={grid,z0,rangeToThr};
-    if(rangeToThr>maxRangeToThr) maxRangeToThr=rangeToThr;
   }
 
   status('Rendering composite coverage…');
   await new Promise(r=>setTimeout(r,0));
   renderComposite(bounds);
 
-  // readouts
-  $('outRange').textContent = (maxRangeToThr/1000).toFixed(1)+' km';
-  $('outRangeNote').textContent = `max, SNR ≥ ${thr} dB`;
-  const sg=selGw();
-  $('outElev').textContent = sg&&sg.study ? Math.round(sg.study.z0)+' m' : '—';
+  updateElevReadout();
   status(`Done — ${gateways.length} gateway${gateways.length>1?'s':''} (best-server composite). `+
     `Noise floor ${noiseFloor.toFixed(1)} dBm`+(terrain?` · DEM z${terrain.zoom}`:' · flat earth')+'.');
   $('runBtn').disabled=false;
@@ -1230,7 +1219,6 @@ $('clearBtn').onclick=()=>{
   if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
   lastStudy=null; hud.style.display='none';
   $('profBox').style.display='none';
-  $('outRange').textContent='—'; $('outElev').textContent='—';
   status('Overlay cleared.');
 };
 </script>
