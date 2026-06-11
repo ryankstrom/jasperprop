@@ -123,8 +123,8 @@
     <fieldset>
       <legend>Reliable Coverage Edge</legend>
       <div class="row">
-        <input id="edgeSlider" type="range" min="-130" max="-60" step="10" value="-100" style="flex:1">
-        <span style="font-weight:700;font-size:18px;color:var(--slate);width:92px;text-align:right;flex:none"><span id="edgeVal">-100</span> dBm</span>
+        <input id="edgeSlider" type="range" min="-130" max="-60" step="10" value="-90" style="flex:1">
+        <span style="font-weight:700;font-size:18px;color:var(--slate);width:92px;text-align:right;flex:none"><span id="edgeVal">-90</span> dBm</span>
       </div>
     </fieldset>
 
@@ -243,7 +243,7 @@ const TILE = 256;
 // RSSI contour rings (dBm) drawn around the gateway, inner=strong
 // Contour rings every 10 dB; colors assigned relative to the user-selected
 // coverage edge (heavy dark line at the edge, greens above, oranges below).
-let edgeLevel = -100;
+let edgeLevel = -90;
 function ringsFor(E){
   const rings=[];
   for(let dbm=-60; dbm>=-130; dbm-=10){
