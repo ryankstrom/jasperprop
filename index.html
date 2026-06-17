@@ -80,8 +80,15 @@
     box-shadow:0 3px 12px rgba(0,0,0,.4);min-width:172px}
   #hud .v{font-size:20px;font-weight:700}
   #hud .m{font-size:13px;color:rgba(238,243,241,.7)}
+  /* aerial imagery toggle */
+  #aerialToggle{position:absolute;top:14px;right:16px;z-index:1000;width:auto;
+    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:9px;
+    padding:8px 12px;font:600 13px system-ui;color:var(--slate);cursor:pointer;
+    box-shadow:0 1px 5px rgba(0,0,0,.18);user-select:none}
+  #aerialToggle:hover{background:#fff;border-color:var(--accent)}
+  #aerialToggle.on{background:var(--slate);color:#fff;border-color:var(--slate)}
   /* Jasper map watermark */
-  #watermark{position:absolute;top:14px;right:16px;z-index:1000;pointer-events:none;
+  #watermark{position:absolute;top:60px;right:16px;z-index:1000;pointer-events:none;
     width:54px;height:auto;padding:9px;border-radius:11px;
     background:rgba(255,255,255,.62);box-shadow:0 1px 5px rgba(0,0,0,.18);
     opacity:.9;backdrop-filter:blur(1px)}
@@ -103,7 +110,9 @@
   <div class="powered">Powered by SLR</div>
 </header>
 <div id="app">
-  <div id="map"><img id="watermark" src="brand/jasper-icon-cyan.svg" alt=""><div id="hud"></div></div>
+  <div id="map">
+    <button id="aerialToggle" type="button">🛰 <span id="aerialLbl">Aerial</span></button>
+    <img id="watermark" src="brand/jasper-icon-cyan.svg" alt=""><div id="hud"></div></div>
   <div id="panel">
     <div>
       <h1>LoRaWAN Propagation Study</h1>
@@ -272,7 +281,25 @@ const map = L.map('map', {zoomControl:true}).setView([43.5448, -80.2482], 12); /
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '© OpenStreetMap'
 }).addTo(map);
-// optional terrain shading basemap toggle could go here
+
+// aerial imagery (Esri World Imagery, no API key) — toggled on top of the
+// street map. It lives in the tile pane, so the coverage shading, contours,
+// and markers (all in higher panes) always stay above it.
+const aerial = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'});
+let aerialOn = false;
+$('aerialToggle').onclick = ()=>{
+  aerialOn = !aerialOn;
+  const btn = $('aerialToggle');
+  if(aerialOn){
+    aerial.addTo(map); aerial.bringToFront();
+    btn.classList.add('on'); $('aerialLbl').textContent = 'Aerial on';
+  } else {
+    map.removeLayer(aerial);
+    btn.classList.remove('on'); $('aerialLbl').textContent = 'Aerial';
+  }
+};
 
 let gwLatLng = null;             // latlng of the SELECTED gateway (profile source)
 let overlay = null;
@@ -286,6 +313,7 @@ let lastTerrainBounds = null;
 let linkLine = null;
 let linkMarker = null;
 let obstMarker = null;
+let profileTarget = null;        // last endpoint clicked in Draw Profile mode
 
 /* ---------- multi-gateway model ---------- */
 let gateways = [];               // {id,name,lat,lng,marker,params:{txH,txP,txG},study}
@@ -314,6 +342,13 @@ function addGateway(latlng, name){
   gw.marker = L.marker([gw.lat,gw.lng], {draggable:true, icon:gwIconUn, zIndexOffset:1100})
     .addTo(map).bindTooltip(gw.name);
   gw.marker.on('click', ()=>selectGw(gateways.indexOf(gw)));
+  gw.marker.on('drag', ()=>{
+    if(gateways.indexOf(gw)!==selIdx) return;        // only the profile source
+    const p=gw.marker.getLatLng(); gw.lat=p.lat; gw.lng=p.lng;
+    gwLatLng=L.latLng(gw.lat,gw.lng);
+    // live-redraw the profile from the new gateway position (uses cached terrain)
+    if(profileTarget && $('profBox').style.display!=='none') profileLink(profileTarget);
+  });
   gw.marker.on('dragend', ()=>{
     const p=gw.marker.getLatLng(); gw.lat=p.lat; gw.lng=p.lng; gw.study=null;
     if(gateways.indexOf(gw)===selIdx) gwLatLng=L.latLng(gw.lat,gw.lng);
@@ -732,6 +767,8 @@ async function compute(){
   renderComposite(bounds);
 
   updateElevReadout();
+  // refresh an open profile against freshly-loaded terrain
+  if(profileTarget && $('profBox').style.display!=='none') profileLink(profileTarget);
   status(`Done — ${gateways.length} gateway${gateways.length>1?'s':''} (best-server composite). `+
     `Noise floor ${noiseFloor.toFixed(1)} dBm`+(terrain?` · DEM z${terrain.zoom}`:' · flat earth')+'.');
   $('runBtn').disabled=false;
@@ -967,6 +1004,7 @@ function inBounds(b,la,lo){ return b && la<=b.n && la>=b.s && lo<=b.e && lo>=b.w
 async function profileLink(target){
   const lat0=gwLatLng.lat, lon0=gwLatLng.lng;
   const lat1=target.lat, lon1=target.lng;
+  profileTarget=target;            // remember endpoint so drags can re-draw it
   const D=haversine(lat0,lon0,lat1,lon1);
   if(D<50){ status('Pick a point further from the gateway.'); return; }
   const useTerrain=$('useTerrain').checked;
@@ -1217,7 +1255,7 @@ $('clearBtn').onclick=()=>{
   if(linkLine){map.removeLayer(linkLine);linkLine=null;}
   if(linkMarker){map.removeLayer(linkMarker);linkMarker=null;}
   if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
-  lastStudy=null; hud.style.display='none';
+  lastStudy=null; hud.style.display='none'; profileTarget=null;
   $('profBox').style.display='none';
   status('Overlay cleared.');
 };
