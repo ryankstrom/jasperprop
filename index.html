@@ -289,6 +289,8 @@ const aerial = L.tileLayer(
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {maxZoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'});
 let aerialOn = false;
+// keep clicks on the button from bubbling to the map (which would add a gateway)
+L.DomEvent.disableClickPropagation($('aerialToggle'));
 $('aerialToggle').onclick = ()=>{
   aerialOn = !aerialOn;
   const btn = $('aerialToggle');
