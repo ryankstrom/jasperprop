@@ -178,8 +178,6 @@
           <legend>Sites</legend>
           <div class="row" style="gap:8px">
             <button class="sec" id="kmzBtn" style="flex:1">📂 Load KMZ / KML</button>
-            <button class="sec" id="rowBtn" style="width:auto;flex:none;padding:7px 11px;
-              font-size:13px;color:var(--muted)">Load ROW</button>
             <input type="file" id="kmzFile" accept=".kmz,.kml" style="display:none">
           </div>
           <div class="row" style="gap:8px">
@@ -270,6 +268,11 @@
       </div>
     </details>
 
+    <div class="row" style="gap:8px">
+      <button class="sec" id="openBtn">📂 Open</button>
+      <button class="sec" id="saveBtn">💾 Save</button>
+      <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
+    </div>
     <div class="row" style="gap:8px">
       <button class="sec" id="clearBtn">Clear overlay</button>
       <button class="sec" id="resetBtn" style="color:#b3382c">↺ Reset all</button>
@@ -556,31 +559,6 @@ $('sensorFile').onchange=async e=>{
   catch(err){ console.error(err); status('Could not read '+file.name+': '+err.message); }
 };
 $('clrSensors').onclick=clearSensors;
-
-// hard-coded site file. Try the copy served next to the app first (stays
-// current if the file is replaced); fall back to this embedded snapshot so
-// the button also works when index.html is opened straight from disk
-// (file:// blocks fetch of local files).
-const ROW_KMZ='ROW_gateways.kmz';
-const ROW_KMZ_B64='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';
-function b64ToBlob(b64){
-  const bin=atob(b64);
-  const u8=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
-  return new Blob([u8]);
-}
-$('rowBtn').onclick=async ()=>{
-  status('Loading '+ROW_KMZ+'…');
-  try{
-    const r=await fetch(ROW_KMZ);
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    await importGatewayBlob(await r.blob(), ROW_KMZ);
-    return;
-  }catch(err){ console.warn('Fetch failed ('+err.message+'); using embedded copy.'); }
-  try{
-    await importGatewayBlob(b64ToBlob(ROW_KMZ_B64), ROW_KMZ);
-  }catch(err){ console.error(err); status('Could not load '+ROW_KMZ+': '+err.message); }
-};
 
 /* ---------- color map (quantized SNR bands, used by the hover HUD) ---------- */
 // stops as [snr_dB, [r,g,b]]
@@ -1336,6 +1314,82 @@ map.on('mouseout', ()=>{ hud.style.display='none'; });
 /* ---------- buttons ---------- */
 $('runBtn').onclick=()=>runStudy();
 $('resetBtn').onclick=()=>location.reload();
+
+/* ---------- save / open project (.jasperprop = JSON) ---------- */
+function saveProject(){
+  const obj={
+    format:'jasperprop', version:1, savedAt:new Date().toISOString(),
+    gateways: gateways.map(g=>({name:g.name, lat:g.lat, lng:g.lng, params:{...g.params}})),
+    sensors:  sensors.map(s=>({name:s.name, lat:s.lat, lng:s.lng})),
+    radio:    {freq:num('freq'), bw:$('bw').value, nf:num('nf'), thr:num('thr')},
+    sensorParams:{rxH:num('rxH'), rxG:num('rxG')},
+    study:    {rad:num('rad'), radials:$('radials').value, useTerrain:$('useTerrain').checked},
+    edgeLevel:edgeLevel,
+    view:     {lat:map.getCenter().lat, lng:map.getCenter().lng, zoom:map.getZoom()},
+    aerial:   aerialOn
+  };
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='project_settings.jasperprop';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status('Saved project_settings.jasperprop.');
+}
+
+function loadProject(obj){
+  if(!obj || obj.format!=='jasperprop') throw new Error('not a .jasperprop file');
+  // wipe current state (map layers + lists)
+  gateways.forEach(g=>map.removeLayer(g.marker)); gateways=[]; selIdx=-1; gwLatLng=null; gwSeq=0;
+  clearSensors();
+  if(overlay){map.removeLayer(overlay);overlay=null;}
+  if(contourLayer){map.removeLayer(contourLayer);contourLayer=null;}
+  if(linkLine){map.removeLayer(linkLine);linkLine=null;}
+  if(linkMarker){map.removeLayer(linkMarker);linkMarker=null;}
+  if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
+  lastStudy=null; profileTarget=null; hud.style.display='none'; $('profBox').style.display='none';
+
+  // form fields
+  const r=obj.radio||{};
+  if(r.freq!=null)$('freq').value=r.freq; if(r.bw)$('bw').value=r.bw;
+  if(r.nf!=null)$('nf').value=r.nf; if(r.thr!=null)$('thr').value=r.thr;
+  const sp=obj.sensorParams||{};
+  if(sp.rxH!=null)$('rxH').value=sp.rxH; if(sp.rxG!=null)$('rxG').value=sp.rxG;
+  const st=obj.study||{};
+  if(st.rad!=null)$('rad').value=st.rad; if(st.radials)$('radials').value=st.radials;
+  if(st.useTerrain!=null)$('useTerrain').checked=st.useTerrain;
+
+  // coverage edge slider + ramp + legend
+  if(obj.edgeLevel!=null){
+    edgeLevel=obj.edgeLevel; $('edgeSlider').value=edgeLevel; $('edgeVal').textContent=edgeLevel;
+    STOPS=buildStops(edgeLevel); RINGS=ringsFor(edgeLevel); buildLegend();
+  }
+
+  // sensors then gateways (override per-gateway params)
+  (obj.sensors||[]).forEach(s=>addSensor({lat:s.lat, lng:s.lng, name:s.name}));
+  (obj.gateways||[]).forEach(g=>{
+    const gw=addGateway({lat:g.lat, lng:g.lng}, g.name);
+    if(g.params) gw.params={txH:g.params.txH, txP:g.params.txP, txG:g.params.txG};
+  });
+  if(gateways.length) selectGw(0);
+
+  // aerial state
+  if(!!obj.aerial !== aerialOn) $('aerialToggle').click();
+  // map view
+  if(obj.view && isFinite(obj.view.lat)) map.setView([obj.view.lat, obj.view.lng], obj.view.zoom);
+
+  if(gateways.length) runStudy();
+  else status(`Loaded project — ${sensors.length} sensor${sensors.length===1?'':'s'}, no gateways.`);
+}
+
+$('saveBtn').onclick=saveProject;
+$('openBtn').onclick=()=>$('projFile').click();
+$('projFile').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value='';
+  if(!f) return;
+  try{ loadProject(JSON.parse(await f.text())); }
+  catch(err){ console.error(err); status('Could not open '+f.name+': '+err.message); }
+};
 
 /* ---------- collapsible side panel ---------- */
 $('panelToggle').onclick=()=>{
