@@ -56,6 +56,9 @@
     color:var(--txt);border-radius:6px;padding:7px 9px;font-size:16px;text-align:right}
   input[type=number]:focus,select:focus{outline:none;border-color:var(--accent);
     box-shadow:0 0 0 2px rgba(47,143,139,.18)}
+  input[type=text]{width:175px;background:#fff;border:1px solid var(--line);color:var(--txt);
+    border-radius:6px;padding:7px 9px;font-size:15px}
+  input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(47,143,139,.18)}
   input[type=range]{width:150px;accent-color:var(--accent)}
   input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px}
   button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px;
@@ -107,6 +110,8 @@
     border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);
     display:flex;align-items:center;justify-content:center}
   .sensor-badge svg{width:15px;height:15px;display:block}
+  .sensor-badge.sel{width:29px;height:29px;border:3px solid var(--slate)}
+  .sensor-badge.sel svg{width:18px;height:18px}
   /* big collapsible panel groups */
   details.group{border:1px solid var(--line);border-radius:10px;overflow:hidden}
   details.group>summary{list-style:none;cursor:pointer;user-select:none;color:#fff;
@@ -192,6 +197,8 @@
         </fieldset>
         <fieldset>
           <legend>Selected gateway</legend>
+          <div class="row"><label>Name</label>
+            <span><input id="gwName" type="text" placeholder="(no gateway)"></span></div>
           <div class="row"><label>Antenna height AGL</label>
             <span><input id="txH" type="number" value="10" min="1" max="200" step="1"> m</span></div>
           <div class="row"><label>TX power (EIRP-ish)</label>
@@ -213,11 +220,21 @@
             <button class="sec" id="sensorBtn" style="flex:1">📂 Load KMZ / KML</button>
             <input type="file" id="sensorFile" accept=".kmz,.kml" style="display:none">
           </div>
+          <div class="row" style="gap:8px">
+            <button class="sec" id="prevSensor" style="width:52px;flex:none">◀</button>
+            <select id="sensorSel" style="flex:1;width:auto;text-align:left"></select>
+            <button class="sec" id="nextSensor" style="width:52px;flex:none">▶</button>
+          </div>
           <div class="row">
-            <span class="hint" id="sensorInfo">No sensors loaded.</span>
-            <button class="sec" id="clrSensors" style="width:auto;flex:none;padding:7px 12px">Clear</button>
+            <span class="hint" id="sensorInfo">None yet — add sensors or load a file.</span>
+            <button class="sec" id="delSensor" style="width:auto;flex:none;padding:7px 12px">Remove</button>
           </div>
           <div class="row"><span class="hint">Reference points only — they don’t affect coverage.</span></div>
+        </fieldset>
+        <fieldset>
+          <legend>Selected sensor</legend>
+          <div class="row"><label>Name</label>
+            <span><input id="sensorName" type="text" placeholder="(no sensor)"></span></div>
         </fieldset>
         <fieldset>
           <legend>Parameters</legend>
@@ -270,7 +287,7 @@
 
     <div class="row" style="gap:8px">
       <button class="sec" id="openBtn">📂 Open</button>
-      <button class="sec" id="saveBtn">💾 Save</button>
+      <button class="sec" id="saveBtn">💾 Save As…</button>
       <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
     </div>
     <div class="row" style="gap:8px">
@@ -418,6 +435,7 @@ function selectGw(i){
   selIdx=i;
   const gw=gateways[i];
   gwLatLng=L.latLng(gw.lat,gw.lng);
+  $('gwName').value=gw.name;
   $('txH').value=gw.params.txH; $('txP').value=gw.params.txP; $('txG').value=gw.params.txG;
   refreshGwUI();
   updateElevReadout();
@@ -453,6 +471,13 @@ function refreshGwUI(){
 // param edits apply to the selected gateway
 ['txH','txP','txG'].forEach(id=>{
   $(id).addEventListener('input',()=>{ const gw=selGw(); if(gw) gw.params[id]=num(id); });
+});
+// rename the selected gateway
+$('gwName').addEventListener('input',()=>{
+  const gw=selGw(); if(!gw) return;
+  gw.name=$('gwName').value.replace(/[<>]/g,'');
+  gw.marker.setTooltipContent(gw.name);
+  refreshGwUI();
 });
 
 $('gwSel').onchange=e=>{ selectGw(+e.target.value); if(gwLatLng) map.panTo(gwLatLng); };
@@ -511,31 +536,56 @@ $('kmzFile').onchange=async e=>{
 
 /* ---------- sensors (reference points; no effect on coverage) ---------- */
 let sensors = [];
+let selSensorIdx = -1;
+let sensorSeq = 0;
+function selSensor(){ return selSensorIdx>=0 ? sensors[selSensorIdx] : null; }
+
+const SENSOR_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" '+
+  'stroke-linecap="round"><circle cx="12" cy="13.5" r="2.3" fill="#fff" stroke="none"/>'+
+  '<path d="M7.6 9.2a6 6 0 0 1 8.8 0"/><path d="M9.6 11.4a3 3 0 0 1 4.8 0"/></svg>';
 const sensorIcon = L.divIcon({className:'', iconSize:[23,23], iconAnchor:[12,12],
-  html:'<div class="sensor-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" '+
-    'stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13.5" r="2.3" fill="#fff" stroke="none"/>'+
-    '<path d="M7.6 9.2a6 6 0 0 1 8.8 0"/><path d="M9.6 11.4a3 3 0 0 1 4.8 0"/></svg></div>'});
+  html:'<div class="sensor-badge">'+SENSOR_SVG+'</div>'});
+const sensorIconSel = L.divIcon({className:'', iconSize:[29,29], iconAnchor:[15,15],
+  html:'<div class="sensor-badge sel">'+SENSOR_SVG+'</div>'});
 
 function addSensor(p){
-  const nm=(p.name||('Sensor '+(sensors.length+1))).replace(/[<>]/g,'');
+  const nm=(p.name||('Sensor '+(++sensorSeq))).replace(/[<>]/g,'');
   const s={name:nm, lat:p.lat, lng:p.lng};
   s.marker=L.marker([p.lat,p.lng],{icon:sensorIcon, draggable:true, zIndexOffset:900})
     .addTo(map).bindTooltip(nm);
+  s.marker.on('click', ()=>selectSensor(sensors.indexOf(s)));
   s.marker.on('dragend',()=>{ const q=s.marker.getLatLng(); s.lat=q.lat; s.lng=q.lng; });
   sensors.push(s);
-  refreshSensorUI();
+  selectSensor(sensors.length-1);
   return s;
+}
+function selectSensor(i){
+  if(i<0||i>=sensors.length) return;
+  selSensorIdx=i;
+  $('sensorName').value=sensors[i].name;
+  refreshSensorUI();
+}
+function removeSensor(i){
+  if(i<0||i>=sensors.length) return;
+  map.removeLayer(sensors[i].marker);
+  sensors.splice(i,1);
+  if(!sensors.length){ selSensorIdx=-1; $('sensorName').value=''; refreshSensorUI(); status('All sensors removed.'); return; }
+  selectSensor(Math.min(i,sensors.length-1));
 }
 function clearSensors(){
   sensors.forEach(s=>map.removeLayer(s.marker));
-  sensors=[];
+  sensors=[]; selSensorIdx=-1; sensorSeq=0; $('sensorName').value='';
   refreshSensorUI();
-  status('Sensors cleared.');
 }
 function refreshSensorUI(){
-  $('sensorInfo').textContent = sensors.length
-    ? `${sensors.length} sensor${sensors.length>1?'s':''} loaded`
-    : 'No sensors loaded.';
+  const sel=$('sensorSel'); sel.innerHTML='';
+  sensors.forEach((s,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=s.name; sel.appendChild(o); });
+  if(selSensorIdx>=0) sel.value=selSensorIdx;
+  const cur = selSensorIdx>=0 ? sensors[selSensorIdx] : null;
+  $('sensorInfo').textContent = (sensors.length && cur)
+    ? `${sensors.length} sensor${sensors.length>1?'s':''} — editing ${cur.name}`
+    : 'None yet — add sensors or load a file.';
+  sensors.forEach((s,i)=>s.marker.setIcon(i===selSensorIdx?sensorIconSel:sensorIcon));
 }
 function fitAll(){
   const pts=[...gateways.map(g=>[g.lat,g.lng]), ...sensors.map(s=>[s.lat,s.lng])];
@@ -558,7 +608,17 @@ $('sensorFile').onchange=async e=>{
   try{ await importSensorBlob(file, file.name); }
   catch(err){ console.error(err); status('Could not read '+file.name+': '+err.message); }
 };
-$('clrSensors').onclick=clearSensors;
+// rename the selected sensor
+$('sensorName').addEventListener('input',()=>{
+  const s=selSensor(); if(!s) return;
+  s.name=$('sensorName').value.replace(/[<>]/g,'');
+  s.marker.setTooltipContent(s.name);
+  refreshSensorUI();
+});
+$('sensorSel').onchange=e=>{ selectSensor(+e.target.value); const s=selSensor(); if(s) map.panTo([s.lat,s.lng]); };
+$('prevSensor').onclick=()=>{ if(sensors.length){ selectSensor((selSensorIdx-1+sensors.length)%sensors.length); const s=selSensor(); map.panTo([s.lat,s.lng]); } };
+$('nextSensor').onclick=()=>{ if(sensors.length){ selectSensor((selSensorIdx+1)%sensors.length); const s=selSensor(); map.panTo([s.lat,s.lng]); } };
+$('delSensor').onclick=()=>removeSensor(selSensorIdx);
 
 /* ---------- color map (quantized SNR bands, used by the hover HUD) ---------- */
 // stops as [snr_dB, [r,g,b]]
@@ -1316,7 +1376,7 @@ $('runBtn').onclick=()=>runStudy();
 $('resetBtn').onclick=()=>location.reload();
 
 /* ---------- save / open project (.jasperprop = JSON) ---------- */
-function saveProject(){
+async function saveProject(){
   const obj={
     format:'jasperprop', version:1, savedAt:new Date().toISOString(),
     gateways: gateways.map(g=>({name:g.name, lat:g.lat, lng:g.lng, params:{...g.params}})),
@@ -1328,13 +1388,31 @@ function saveProject(){
     view:     {lat:map.getCenter().lat, lng:map.getCenter().lng, zoom:map.getZoom()},
     aerial:   aerialOn
   };
-  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const json=JSON.stringify(obj,null,2);
+  // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
+  if(window.showSaveFilePicker){
+    try{
+      const handle=await window.showSaveFilePicker({
+        suggestedName:'project_settings.jasperprop',
+        types:[{description:'Jasper project', accept:{'application/json':['.jasperprop','.json']}}]
+      });
+      const w=await handle.createWritable();
+      await w.write(json); await w.close();
+      status('Saved '+handle.name+'.');
+    }catch(err){
+      if(err && err.name==='AbortError') return;   // user cancelled the dialog
+      console.error(err); status('Save failed: '+err.message);
+    }
+    return;
+  }
+  // fallback: download to the browser's Downloads folder
+  const blob=new Blob([json],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url; a.download='project_settings.jasperprop';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  status('Saved project_settings.jasperprop.');
+  status('Saved project_settings.jasperprop (Downloads).');
 }
 
 function loadProject(obj){
@@ -1367,6 +1445,7 @@ function loadProject(obj){
 
   // sensors then gateways (override per-gateway params)
   (obj.sensors||[]).forEach(s=>addSensor({lat:s.lat, lng:s.lng, name:s.name}));
+  if(sensors.length) selectSensor(0);
   (obj.gateways||[]).forEach(g=>{
     const gw=addGateway({lat:g.lat, lng:g.lng}, g.name);
     if(g.params) gw.params={txH:g.params.txH, txP:g.params.txP, txG:g.params.txG};
