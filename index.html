@@ -33,6 +33,11 @@
   #brandbar .title b{font-weight:600}
   #brandbar .spacer{flex:1}
   #brandbar .powered{font-size:14px;color:rgba(255,255,255,.65);letter-spacing:.3px}
+  #panelToggle{flex:none;width:auto;background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.3);color:#eef3f1;border-radius:8px;
+    padding:8px 13px;font:600 13px system-ui;cursor:pointer}
+  #panelToggle:hover{background:rgba(255,255,255,.22)}
+  #app.collapsed #panel{display:none}
   #app{flex:1;min-height:0;display:flex}
   #map{flex:1;height:100%;background:#dfe3df;cursor:crosshair}
   #panel{width:400px;flex:none;background:var(--paper);border-left:1px solid var(--line);
@@ -124,6 +129,7 @@
   <div class="title">LoRaWAN <b>Propagation Study</b></div>
   <div class="spacer"></div>
   <div class="powered">Powered by SLR</div>
+  <button id="panelToggle" type="button" title="Hide panel">Hide panel ⟩</button>
 </header>
 <div id="app">
   <div id="map">
@@ -247,7 +253,7 @@
         <fieldset>
           <legend>Study area &amp; quality</legend>
           <div class="row"><label>Max radius</label>
-            <span><input id="rad" type="number" value="3" min="1" max="60" step="1"> km</span></div>
+            <span><input id="rad" type="number" value="10" min="1" max="60" step="1"> km</span></div>
           <div class="row"><label>Radials</label>
             <span><select id="radials">
               <option value="90">90 (fast)</option>
@@ -1330,6 +1336,15 @@ map.on('mouseout', ()=>{ hud.style.display='none'; });
 /* ---------- buttons ---------- */
 $('runBtn').onclick=()=>runStudy();
 $('resetBtn').onclick=()=>location.reload();
+
+/* ---------- collapsible side panel ---------- */
+$('panelToggle').onclick=()=>{
+  const collapsed=$('app').classList.toggle('collapsed');
+  const b=$('panelToggle');
+  b.textContent = collapsed ? '⟨ Show panel' : 'Hide panel ⟩';
+  b.title = collapsed ? 'Show panel' : 'Hide panel';
+  setTimeout(()=>map.invalidateSize(),0);   // let Leaflet refit the new width
+};
 
 /* ---------- coverage-edge slider ---------- */
 $('edgeSlider').addEventListener('input',()=>{       // live label + legend
