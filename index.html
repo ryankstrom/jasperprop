@@ -125,6 +125,20 @@
   details.g-gw>summary{background:var(--slate)}
   details.g-sensor>summary{background:var(--accent)}
   details.g-other>summary{background:var(--slate-dd)}
+  details.g-valid>summary{background:#4f6b8f}
+  .modegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  /* top-level workspace tabs */
+  .tabs{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}
+  .tab{flex:1;width:auto;background:#fff;color:var(--slate);border:0;border-radius:0;
+    padding:10px 6px;font-size:13.5px;font-weight:600;cursor:pointer}
+  .tab+.tab{border-left:1px solid var(--line)}
+  .tab:hover{background:var(--paper)}
+  .tab.active{background:var(--slate);color:#fff}
+  .tab.active:hover{background:var(--slate-d)}
+  /* field-validation measurement marker (colored by RSSI) */
+  .meas-dot{width:16px;height:16px;border-radius:50%;border:2px solid #fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .meas-dot.sel{width:22px;height:22px;border:3px solid var(--slate)}
 </style>
 </head>
 <body>
@@ -141,21 +155,24 @@
     <button id="aerialToggle" type="button">🛰 <span id="aerialLbl">Aerial</span></button>
     <div id="hud"></div></div>
   <div id="panel">
-    <div>
-      <h1>LoRaWAN Propagation Study</h1>
+    <div class="tabs">
+      <button class="tab active" id="tabPred" type="button">Prediction</button>
+      <button class="tab" id="tabValid" type="button">Field Validation</button>
+    </div>
+    <div id="status">Click on the map to place a gateway.</div>
+
+    <div id="viewPred">
       <p class="sub">Configured for <b>US915</b> (902–928 MHz ISM, FCC Part 15.247).
         Click the map to add gateways, or load a KMZ/KML of sites. The tool pulls
         public terrain (AWS Terrarium DEM), runs a knife-edge diffraction path-loss
         model from every gateway, and shades the combined (best-server) coverage.</p>
-    </div>
 
-    <div class="row" style="gap:6px">
-      <button class="sec modebtn active" id="modeGw" style="flex:1;padding:8px 5px;font-size:13px"><img class="gw-ico" id="gwBtnIco" src="brand/jasper-icon-white.svg" alt=""> Add gateway</button>
-      <button class="sec modebtn" id="modeSensor" style="flex:1;padding:8px 5px;font-size:13px">◆ Add sensor</button>
-      <button class="sec modebtn" id="modeProf" style="flex:1;padding:8px 5px;font-size:13px">📈 Draw Profile</button>
-    </div>
-    <button id="runBtn">▶ Run study (all gateways)</button>
-    <div id="status">Click on the map to place a gateway.</div>
+      <div class="row" style="gap:6px">
+        <button class="sec modebtn active" id="modeGw" style="flex:1;padding:8px 5px;font-size:13px"><img class="gw-ico" id="gwBtnIco" src="brand/jasper-icon-white.svg" alt=""> Add gateway</button>
+        <button class="sec modebtn" id="modeSensor" style="flex:1;padding:8px 5px;font-size:13px">◆ Add sensor</button>
+        <button class="sec modebtn" id="modeProf" style="flex:1;padding:8px 5px;font-size:13px">📈 Draw Profile</button>
+      </div>
+      <button id="runBtn">▶ Run study (all gateways)</button>
 
     <fieldset>
       <legend>Reliable Coverage Edge</legend>
@@ -285,23 +302,60 @@
       </div>
     </details>
 
+      <div class="row"><button class="sec" id="clearBtn" style="width:100%">Clear overlay</button></div>
+
+      <p class="foot">
+        Model: free-space path loss + ITU-R P.526 single knife-edge diffraction over the
+        terrain profile, 4/3-earth curvature. SNR = RSSI − thermal noise floor
+        (−174 + 10·log₁₀(BW) + NF). Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">AWS Terrain Tiles</a>.
+        This is a planning estimate, not a guarantee — it ignores clutter (buildings,
+        foliage), multipath, and rain. Validate critical links in the field.
+      </p>
+    </div><!-- /viewPred -->
+
+    <div id="viewValid" style="display:none">
+      <p class="sub">Walk the coverage area with a LoRaWAN device and log readings. Each point
+        pairs your location with the measured RSSI and an optional note. Points auto-save on
+        this device — export to KML/KMZ (or Save the project) for a permanent copy.</p>
+
+      <fieldset>
+        <legend>Points</legend>
+        <div class="row"><button class="sec" id="measGps" style="width:100%">📍 Add at my location (GPS)</button></div>
+        <div class="row"><span class="hint">Or tap the map anywhere to drop a reading.</span></div>
+        <div class="row" style="gap:8px">
+          <button class="sec" id="prevMeas" style="width:52px;flex:none">◀</button>
+          <select id="measSel" style="flex:1;width:auto;text-align:left"></select>
+          <button class="sec" id="nextMeas" style="width:52px;flex:none">▶</button>
+        </div>
+        <div class="row">
+          <span class="hint" id="measInfo">No points yet.</span>
+          <button class="sec" id="delMeas" style="width:auto;flex:none;padding:7px 12px">Remove</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Selected point</legend>
+        <div class="row"><label>RSSI</label>
+          <span><input id="mRssi" type="number" min="-140" max="0" step="1"> dBm</span></div>
+        <div class="row"><label>Note</label>
+          <span><input id="mNote" type="text" placeholder="(optional)"></span></div>
+        <div class="row"><span class="hint" id="mMeta" style="flex:1">—</span></div>
+      </fieldset>
+      <fieldset>
+        <legend>Export</legend>
+        <div class="row" style="gap:8px">
+          <button class="sec" id="expKml" style="flex:1">Export KML</button>
+          <button class="sec" id="expKmz" style="flex:1">Export KMZ</button>
+        </div>
+        <div class="row"><span class="hint">Points auto-save on this device; export for a permanent file.</span></div>
+      </fieldset>
+    </div><!-- /viewValid -->
+
     <div class="row" style="gap:8px">
       <button class="sec" id="openBtn">📂 Open</button>
       <button class="sec" id="saveBtn">💾 Save As…</button>
       <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
     </div>
-    <div class="row" style="gap:8px">
-      <button class="sec" id="clearBtn">Clear overlay</button>
-      <button class="sec" id="resetBtn" style="color:#b3382c">↺ Reset all</button>
-    </div>
-
-    <p class="foot">
-      Model: free-space path loss + ITU-R P.526 single knife-edge diffraction over the
-      terrain profile, 4/3-earth curvature. SNR = RSSI − thermal noise floor
-      (−174 + 10·log₁₀(BW) + NF). Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">AWS Terrain Tiles</a>.
-      This is a planning estimate, not a guarantee — it ignores clutter (buildings,
-      foliage), multipath, and rain. Validate critical links in the field.
-    </p>
+    <div class="row"><button class="sec" id="resetBtn" style="width:100%;color:#b3382c">↺ Reset all</button></div>
   </div>
 </div>
 
@@ -396,6 +450,9 @@ map.on('click', e => {
     profileLink(e.latlng);
   } else if(mode==='sensor'){
     addSensor({lat:e.latlng.lat, lng:e.latlng.lng});
+  } else if(mode==='validate'){
+    addMeasurement({lat:e.latlng.lat, lng:e.latlng.lng});
+    status('Point added — enter the RSSI in Field Validation.');
   } else {
     addGateway(e.latlng);
     runStudy();
@@ -619,6 +676,154 @@ $('sensorSel').onchange=e=>{ selectSensor(+e.target.value); const s=selSensor();
 $('prevSensor').onclick=()=>{ if(sensors.length){ selectSensor((selSensorIdx-1+sensors.length)%sensors.length); const s=selSensor(); map.panTo([s.lat,s.lng]); } };
 $('nextSensor').onclick=()=>{ if(sensors.length){ selectSensor((selSensorIdx+1)%sensors.length); const s=selSensor(); map.panTo([s.lat,s.lng]); } };
 $('delSensor').onclick=()=>removeSensor(selSensorIdx);
+
+/* ---------- field validation (measured points; export KML/KMZ) ---------- */
+const MEAS_KEY='jasperprop:measurements';
+let measurements=[];
+let selMeasIdx=-1;
+let measSeq=0;
+function selMeas(){ return selMeasIdx>=0 ? measurements[selMeasIdx] : null; }
+
+function measColor(m){
+  if(m.rssi==null || !isFinite(m.rssi)) return '#9aa5a5';   // grey = no reading yet
+  const c=rssiColor(m.rssi); return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function measIconFor(m,sel){
+  return L.divIcon({className:'', iconSize: sel?[22,22]:[16,16], iconAnchor: sel?[11,11]:[8,8],
+    html:`<div class="meas-dot${sel?' sel':''}" style="background:${measColor(m)}"></div>`});
+}
+function measTip(m){
+  return (m.rssi!=null? m.rssi+' dBm' : '(no RSSI)') + (m.note? ' — '+m.note.replace(/[<>]/g,'') : '');
+}
+function addMeasurement(p){
+  const m={ id:++measSeq, lat:p.lat, lng:p.lng,
+    accuracy:p.accuracy!=null?p.accuracy:null,
+    rssi:p.rssi!=null?p.rssi:null, snr:p.snr!=null?p.snr:null,
+    sf:p.sf||'', note:p.note||'', time:p.time||new Date().toISOString() };
+  m.marker=L.marker([m.lat,m.lng],{icon:measIconFor(m,false), draggable:true, zIndexOffset:800})
+    .addTo(map).bindTooltip(measTip(m));
+  m.marker.on('click', ()=>selectMeasurement(measurements.indexOf(m)));
+  m.marker.on('dragend', ()=>{ const q=m.marker.getLatLng(); m.lat=q.lat; m.lng=q.lng; saveMeas(); });
+  measurements.push(m);
+  selectMeasurement(measurements.length-1);
+  saveMeas();
+  return m;
+}
+function selectMeasurement(i){
+  if(i<0||i>=measurements.length) return;
+  selMeasIdx=i; const m=measurements[i];
+  $('mRssi').value = m.rssi!=null?m.rssi:'';
+  $('mNote').value = m.note||'';
+  refreshMeasUI();
+}
+function removeMeasurement(i){
+  if(i<0||i>=measurements.length) return;
+  map.removeLayer(measurements[i].marker);
+  measurements.splice(i,1); saveMeas();
+  if(!measurements.length){ selMeasIdx=-1; ['mRssi','mNote'].forEach(id=>$(id).value=''); refreshMeasUI(); return; }
+  selectMeasurement(Math.min(i,measurements.length-1));
+}
+function clearMeasurements(){
+  measurements.forEach(m=>map.removeLayer(m.marker));
+  measurements=[]; selMeasIdx=-1; measSeq=0;
+  ['mRssi','mNote'].forEach(id=>$(id).value='');
+  refreshMeasUI(); saveMeas();
+}
+function refreshMeasUI(){
+  const sel=$('measSel'); sel.innerHTML='';
+  measurements.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i;
+    o.textContent=`P${i+1}`+(m.rssi!=null?` (${m.rssi} dBm)`:''); sel.appendChild(o); });
+  if(selMeasIdx>=0) sel.value=selMeasIdx;
+  const cur=selMeasIdx>=0?measurements[selMeasIdx]:null;
+  $('measInfo').textContent = measurements.length
+    ? `${measurements.length} point${measurements.length>1?'s':''}` : 'No points yet.';
+  $('mMeta').textContent = cur
+    ? `${cur.lat.toFixed(5)}, ${cur.lng.toFixed(5)}`
+      + (cur.accuracy!=null?` · ±${Math.round(cur.accuracy)} m`:'')
+      + ` · ${new Date(cur.time).toLocaleString()}`
+    : '—';
+  measurements.forEach((m,i)=>{ m.marker.setIcon(measIconFor(m,i===selMeasIdx)); m.marker.setTooltipContent(measTip(m)); });
+}
+function saveMeas(){
+  try{ localStorage.setItem(MEAS_KEY, JSON.stringify(measurements.map(m=>({
+    id:m.id,lat:m.lat,lng:m.lng,accuracy:m.accuracy,rssi:m.rssi,snr:m.snr,sf:m.sf,note:m.note,time:m.time
+  })))); }catch(e){/* storage unavailable / full */}
+}
+function loadMeasFromStore(){
+  let arr=[]; try{ arr=JSON.parse(localStorage.getItem(MEAS_KEY)||'[]'); }catch(e){ arr=[]; }
+  if(Array.isArray(arr) && arr.length){
+    arr.forEach(m=>addMeasurement(m));
+    selectMeasurement(0);
+  } else refreshMeasUI();
+}
+
+$('measGps').onclick=()=>{
+  if(!navigator.geolocation){ status('Geolocation is not available in this browser.'); return; }
+  status('Getting your location…');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ const c=pos.coords; addMeasurement({lat:c.latitude,lng:c.longitude,accuracy:c.accuracy});
+      map.panTo([c.latitude,c.longitude]);
+      status('Point added at your location — enter the RSSI.'); },
+    err=>status('Location error: '+err.message),
+    {enableHighAccuracy:true, timeout:10000, maximumAge:0});
+};
+$('mRssi').addEventListener('input',()=>{ const m=selMeas(); if(!m)return;
+  const v=$('mRssi').value.trim(); m.rssi = v===''?null:parseFloat(v); saveMeas(); refreshMeasUI(); });
+$('mNote').addEventListener('input',()=>{ const m=selMeas(); if(!m)return;
+  m.note=$('mNote').value.replace(/[<>]/g,''); m.marker.setTooltipContent(measTip(m)); saveMeas(); });
+$('measSel').onchange=e=>{ selectMeasurement(+e.target.value); const m=selMeas(); if(m) map.panTo([m.lat,m.lng]); };
+$('prevMeas').onclick=()=>{ if(measurements.length){ selectMeasurement((selMeasIdx-1+measurements.length)%measurements.length); const m=selMeas(); map.panTo([m.lat,m.lng]); } };
+$('nextMeas').onclick=()=>{ if(measurements.length){ selectMeasurement((selMeasIdx+1)%measurements.length); const m=selMeas(); map.panTo([m.lat,m.lng]); } };
+$('delMeas').onclick=()=>removeMeasurement(selMeasIdx);
+
+/* ---- KML / KMZ export ---- */
+function xmlEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function kmlColor(m){                       // KML color is aabbggrr
+  if(m.rssi==null) return 'ff9aa5a5';
+  const c=rssiColor(m.rssi), h=n=>n.toString(16).padStart(2,'0');
+  return 'ff'+h(c[2])+h(c[1])+h(c[0]);
+}
+function buildKml(){
+  let s='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n';
+  s+='<name>JasperProp field validation</name>\n';
+  measurements.forEach((m,i)=>{
+    const nm=`P${i+1}`+(m.rssi!=null?` (${m.rssi} dBm)`:'');
+    s+='<Placemark>\n<name>'+xmlEsc(nm)+'</name>\n';
+    s+='<Style><IconStyle><color>'+kmlColor(m)+'</color><scale>1.1</scale>'
+      +'<Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>'
+      +'</IconStyle></Style>\n';
+    s+='<ExtendedData>\n';
+    const add=(k,v)=>{ s+='<Data name="'+k+'"><value>'+xmlEsc(v)+'</value></Data>\n'; };
+    if(m.rssi!=null) add('rssi_dbm',m.rssi);
+    if(m.snr!=null)  add('snr_db',m.snr);
+    if(m.sf)         add('spreading_factor',m.sf);
+    if(m.accuracy!=null) add('gps_accuracy_m',Math.round(m.accuracy));
+    add('time',m.time);
+    if(m.note) add('note',m.note);
+    s+='</ExtendedData>\n';
+    if(m.note) s+='<description>'+xmlEsc(m.note)+'</description>\n';
+    s+='<Point><coordinates>'+m.lng+','+m.lat+',0</coordinates></Point>\n</Placemark>\n';
+  });
+  return s+'</Document>\n</kml>\n';
+}
+function downloadBlob(blob,name){
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('expKml').onclick=()=>{
+  if(!measurements.length){ status('No validation points to export.'); return; }
+  downloadBlob(new Blob([buildKml()],{type:'application/vnd.google-earth.kml+xml'}),'field_validation.kml');
+  status(`Exported ${measurements.length} point${measurements.length>1?'s':''} to KML.`);
+};
+$('expKmz').onclick=async ()=>{
+  if(!measurements.length){ status('No validation points to export.'); return; }
+  const zip=new JSZip(); zip.file('doc.kml', buildKml());
+  const blob=await zip.generateAsync({type:'blob', mimeType:'application/vnd.google-earth.kmz'});
+  downloadBlob(blob,'field_validation.kmz');
+  status(`Exported ${measurements.length} point${measurements.length>1?'s':''} to KMZ.`);
+};
 
 /* ---------- color map (quantized SNR bands, used by the hover HUD) ---------- */
 // stops as [snr_dB, [r,g,b]]
@@ -1343,6 +1548,8 @@ function setMode(m){
                    : 'Place a gateway first, then click to profile.');
   } else if(m==='sensor'){
     status('Click the map to drop a sensor (reference point — no effect on coverage).');
+  } else if(m==='validate'){
+    status('Tap the map at your reading, or use “Add at my location”, then enter the RSSI.');
   } else {
     status('Click the map to add a gateway (drag markers to move them).');
   }
@@ -1350,6 +1557,39 @@ function setMode(m){
 $('modeGw').onclick=()=>setMode('gateway');
 $('modeSensor').onclick=()=>setMode('sensor');
 $('modeProf').onclick=()=>setMode('profile');
+
+/* ---------- workspace switch: Prediction vs Field Validation ---------- */
+let currentView='prediction';
+function predictionLayers(){
+  const a=[];
+  gateways.forEach(g=>a.push(g.marker));
+  sensors.forEach(s=>a.push(s.marker));
+  if(overlay)a.push(overlay);
+  if(contourLayer)a.push(contourLayer);
+  if(linkLine)a.push(linkLine);
+  if(linkMarker)a.push(linkMarker);
+  if(obstMarker)a.push(obstMarker);
+  return a;
+}
+function validationLayers(){ return measurements.map(m=>m.marker); }
+function setLayers(list,show){ list.forEach(l=>{ if(show){ if(!map.hasLayer(l)) map.addLayer(l); }
+  else if(map.hasLayer(l)) map.removeLayer(l); }); }
+
+function showView(v){
+  currentView=v;
+  const pred = v!=='validation';
+  $('viewPred').style.display = pred?'':'none';
+  $('viewValid').style.display = pred?'none':'';
+  $('tabPred').classList.toggle('active', pred);
+  $('tabValid').classList.toggle('active', !pred);
+  // clear the other module's layers off the map; show this module's
+  setLayers(validationLayers(), !pred);
+  setLayers(predictionLayers(), pred);
+  if(!pred) hud.style.display='none';
+  setMode(pred ? 'gateway' : 'validate');
+}
+$('tabPred').onclick=()=>showView('prediction');
+$('tabValid').onclick=()=>showView('validation');
 
 /* ---------- live hover readout ---------- */
 const hud=$('hud');
@@ -1386,7 +1626,9 @@ async function saveProject(){
     study:    {rad:num('rad'), radials:$('radials').value, useTerrain:$('useTerrain').checked},
     edgeLevel:edgeLevel,
     view:     {lat:map.getCenter().lat, lng:map.getCenter().lng, zoom:map.getZoom()},
-    aerial:   aerialOn
+    aerial:   aerialOn,
+    measurements: measurements.map(m=>({lat:m.lat, lng:m.lng, accuracy:m.accuracy,
+      rssi:m.rssi, snr:m.snr, sf:m.sf, note:m.note, time:m.time}))
   };
   const json=JSON.stringify(obj,null,2);
   // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
@@ -1443,6 +1685,11 @@ function loadProject(obj){
     STOPS=buildStops(edgeLevel); RINGS=ringsFor(edgeLevel); buildLegend();
   }
 
+  // field-validation points
+  clearMeasurements();
+  (obj.measurements||[]).forEach(m=>addMeasurement(m));
+  if(measurements.length) selectMeasurement(0);
+
   // sensors then gateways (override per-gateway params)
   (obj.sensors||[]).forEach(s=>addSensor({lat:s.lat, lng:s.lng, name:s.name}));
   if(sensors.length) selectSensor(0);
@@ -1457,6 +1704,7 @@ function loadProject(obj){
   // map view
   if(obj.view && isFinite(obj.view.lat)) map.setView([obj.view.lat, obj.view.lng], obj.view.zoom);
 
+  showView('prediction');   // land in the prediction workspace (hides field points)
   if(gateways.length) runStudy();
   else status(`Loaded project — ${sensors.length} sensor${sensors.length===1?'':'s'}, no gateways.`);
 }
@@ -1505,6 +1753,10 @@ $('clearBtn').onclick=()=>{
   $('profBox').style.display='none';
   status('Overlay cleared.');
 };
+
+/* ---------- restore field-validation points saved on this device ---------- */
+loadMeasFromStore();
+showView('prediction');   // start in the prediction workspace (hides stored points)
 </script>
 </body>
 </html>
