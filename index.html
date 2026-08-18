@@ -38,6 +38,12 @@
     padding:8px 13px;font:600 13px system-ui;cursor:pointer}
   #panelToggle:hover{background:rgba(255,255,255,.22)}
   #app.collapsed #panel{display:none}
+  /* header file actions */
+  .hdr-actions{display:flex;gap:6px;flex:none}
+  .hdr-btn{flex:none;width:auto;background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.3);color:#eef3f1;border-radius:8px;
+    padding:7px 10px;font:600 12.5px system-ui;cursor:pointer;white-space:nowrap}
+  .hdr-btn:hover{background:rgba(255,255,255,.22)}
   #app{flex:1;min-height:0;display:flex}
   #map{flex:1;height:100%;background:#dfe3df;cursor:crosshair}
   #panel{width:384px;flex:none;background:var(--paper);border-left:1px solid var(--line);
@@ -135,6 +141,19 @@
   .tab:hover{background:var(--paper)}
   .tab.active{background:var(--slate);color:#fff}
   .tab.active:hover{background:var(--slate-d)}
+  /* confirmation modal */
+  #modalBackdrop{position:fixed;inset:0;z-index:3000;display:none;padding:20px;
+    background:rgba(20,28,30,.5);align-items:center;justify-content:center}
+  #modalBackdrop.show{display:flex}
+  .modal{background:#fff;border-radius:12px;max-width:400px;width:100%;
+    padding:22px 22px 18px;box-shadow:0 14px 44px rgba(0,0,0,.38)}
+  .modal h2{font-family:var(--serif);font-size:20px;color:var(--slate);margin:0 0 10px}
+  .modal p{font-size:14.5px;line-height:1.5;color:var(--txt);margin:0 0 9px}
+  .modal p.muted{color:var(--muted);font-size:13px;margin-bottom:0}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .modal-actions button{width:auto;padding:9px 16px}
+  .modal button.danger{background:#b3382c;color:#fff;font-weight:600}
+  .modal button.danger:hover{background:#93291f}
   /* field-validation measurement marker (colored by RSSI) */
   .meas-dot{width:16px;height:16px;border-radius:50%;border:2px solid #fff;
     box-shadow:0 1px 3px rgba(0,0,0,.5)}
@@ -147,7 +166,11 @@
   <div class="divider"></div>
   <div class="title">LoRaWAN <b>Propagation Study</b></div>
   <div class="spacer"></div>
-  <div class="powered">Powered by SLR</div>
+  <div class="hdr-actions">
+    <button id="openBtn" class="hdr-btn" type="button" title="Open a .jasperprop project">📂 Open</button>
+    <button id="saveBtn" class="hdr-btn" type="button" title="Save the project to a .jasperprop file">💾 Save</button>
+    <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
+  </div>
   <button id="panelToggle" type="button" title="Hide panel">Hide panel ⟩</button>
 </header>
 <div id="app">
@@ -303,6 +326,7 @@
     </details>
 
       <div class="row"><button class="sec" id="clearBtn" style="width:100%">Clear overlay</button></div>
+      <div class="row"><button class="sec" id="resetPredBtn" style="width:100%;color:#b3382c">↺ Reset Prediction Elements</button></div>
 
       <p class="foot">
         Model: free-space path loss + ITU-R P.526 single knife-edge diffraction over the
@@ -348,14 +372,20 @@
         </div>
         <div class="row"><span class="hint">Points auto-save on this device; export for a permanent file.</span></div>
       </fieldset>
+      <div class="row"><button class="sec" id="resetValidBtn" style="width:100%;color:#b3382c">↺ Reset Validation Elements</button></div>
     </div><!-- /viewValid -->
 
-    <div class="row" style="gap:8px">
-      <button class="sec" id="openBtn">📂 Open</button>
-      <button class="sec" id="saveBtn">💾 Save As…</button>
-      <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
+  </div>
+</div>
+
+<div id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">Reset?</h2>
+    <div id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="sec" id="resetCancel">Cancel</button>
+      <button class="danger" id="resetConfirm">Reset</button>
     </div>
-    <div class="row"><button class="sec" id="resetBtn" style="width:100%;color:#b3382c">↺ Reset all</button></div>
   </div>
 </div>
 
@@ -422,6 +452,7 @@ $('aerialToggle').onclick = ()=>{
     map.removeLayer(aerial);
     btn.classList.remove('on'); $('aerialLbl').textContent = 'Aerial';
   }
+  if(typeof schedulePredSave==='function') schedulePredSave();
 };
 
 let gwLatLng = null;             // latlng of the SELECTED gateway (profile source)
@@ -480,10 +511,11 @@ function addGateway(latlng, name){
   gw.marker.on('dragend', ()=>{
     const p=gw.marker.getLatLng(); gw.lat=p.lat; gw.lng=p.lng; gw.study=null;
     if(gateways.indexOf(gw)===selIdx) gwLatLng=L.latLng(gw.lat,gw.lng);
-    runStudy();
+    runStudy(); schedulePredSave();
   });
   gateways.push(gw);
   selectGw(gateways.length-1);
+  schedulePredSave();
   return gw;
 }
 
@@ -507,6 +539,7 @@ function removeGw(i){
   if(i<0||i>=gateways.length) return;
   map.removeLayer(gateways[i].marker);
   gateways.splice(i,1);
+  schedulePredSave();
   if(!gateways.length){ selIdx=-1; gwLatLng=null; refreshGwUI(); status('All gateways removed.'); return; }
   selectGw(Math.min(i,gateways.length-1));
   runStudy();
@@ -611,9 +644,10 @@ function addSensor(p){
   s.marker=L.marker([p.lat,p.lng],{icon:sensorIcon, draggable:true, zIndexOffset:900})
     .addTo(map).bindTooltip(nm);
   s.marker.on('click', ()=>selectSensor(sensors.indexOf(s)));
-  s.marker.on('dragend',()=>{ const q=s.marker.getLatLng(); s.lat=q.lat; s.lng=q.lng; });
+  s.marker.on('dragend',()=>{ const q=s.marker.getLatLng(); s.lat=q.lat; s.lng=q.lng; schedulePredSave(); });
   sensors.push(s);
   selectSensor(sensors.length-1);
+  schedulePredSave();
   return s;
 }
 function selectSensor(i){
@@ -626,6 +660,7 @@ function removeSensor(i){
   if(i<0||i>=sensors.length) return;
   map.removeLayer(sensors[i].marker);
   sensors.splice(i,1);
+  schedulePredSave();
   if(!sensors.length){ selSensorIdx=-1; $('sensorName').value=''; refreshSensorUI(); status('All sensors removed.'); return; }
   selectSensor(Math.min(i,sensors.length-1));
 }
@@ -1119,6 +1154,7 @@ async function compute(){
   status(`Done — ${gateways.length} gateway${gateways.length>1?'s':''} (best-server composite). `+
     `Noise floor ${noiseFloor.toFixed(1)} dBm`+(terrain?` · DEM z${terrain.zoom}`:' · flat earth')+'.');
   $('runBtn').disabled=false;
+  schedulePredSave();
 }
 
 /* ---------- bilinear sample of one polar grid ---------- */
@@ -1610,12 +1646,35 @@ map.on('mouseout', ()=>{ hud.style.display='none'; });
 
 /* ---------- buttons ---------- */
 $('runBtn').onclick=()=>runStudy();
-$('resetBtn').onclick=()=>location.reload();
+/* ---------- reusable confirmation modal ---------- */
+const resetModal=$('modalBackdrop');
+let pendingConfirm=null;
+function confirmDialog(title, bodyHtml, confirmLabel, onConfirm){
+  $('modalTitle').textContent=title;
+  $('modalBody').innerHTML=bodyHtml;
+  $('resetConfirm').textContent=confirmLabel;
+  pendingConfirm=onConfirm;
+  resetModal.classList.add('show');
+}
+function closeModal(){ resetModal.classList.remove('show'); pendingConfirm=null; }
+$('resetCancel').onclick=closeModal;
+$('resetConfirm').onclick=()=>{ const fn=pendingConfirm; closeModal(); if(fn) fn(); };
+resetModal.addEventListener('click', e=>{ if(e.target===resetModal) closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
 
-/* ---------- save / open project (.jasperprop = JSON) ---------- */
-async function saveProject(){
-  const obj={
-    format:'jasperprop', version:1, savedAt:new Date().toISOString(),
+$('resetPredBtn').onclick=()=>confirmDialog('Reset prediction?',
+  '<p>This clears all <b>gateways</b>, <b>sensors</b>, coverage, and prediction settings '+
+  '(back to defaults) on this device.</p>'+
+  '<p class="muted">Your field-validation points are kept.</p>',
+  'Reset prediction', resetPrediction);
+$('resetValidBtn').onclick=()=>confirmDialog('Reset field validation?',
+  '<p>This deletes all <b>field-validation points</b> saved on this device.</p>'+
+  '<p class="muted">Your gateways, sensors, and coverage are kept.</p>',
+  'Reset validation', resetValidation);
+
+/* ---------- prediction state (shared by Save/Open and the autosave net) ---------- */
+function predState(){
+  return {
     gateways: gateways.map(g=>({name:g.name, lat:g.lat, lng:g.lng, params:{...g.params}})),
     sensors:  sensors.map(s=>({name:s.name, lat:s.lat, lng:s.lng})),
     radio:    {freq:num('freq'), bw:$('bw').value, nf:num('nf'), thr:num('thr')},
@@ -1623,10 +1682,78 @@ async function saveProject(){
     study:    {rad:num('rad'), radials:$('radials').value, useTerrain:$('useTerrain').checked},
     edgeLevel:edgeLevel,
     view:     {lat:map.getCenter().lat, lng:map.getCenter().lng, zoom:map.getZoom()},
-    aerial:   aerialOn,
-    measurements: measurements.map(m=>({lat:m.lat, lng:m.lng, accuracy:m.accuracy,
-      rssi:m.rssi, note:m.note, time:m.time}))
+    aerial:   aerialOn
   };
+}
+let restoring=false;
+function applyPredState(obj){
+  restoring=true;
+  gateways.forEach(g=>map.removeLayer(g.marker)); gateways=[]; selIdx=-1; gwLatLng=null; gwSeq=0;
+  clearSensors();
+  if(overlay){map.removeLayer(overlay);overlay=null;}
+  if(contourLayer){map.removeLayer(contourLayer);contourLayer=null;}
+  if(linkLine){map.removeLayer(linkLine);linkLine=null;}
+  if(linkMarker){map.removeLayer(linkMarker);linkMarker=null;}
+  if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
+  lastStudy=null; profileTarget=null; hud.style.display='none'; $('profBox').style.display='none';
+  const r=obj.radio||{};
+  if(r.freq!=null)$('freq').value=r.freq; if(r.bw)$('bw').value=r.bw;
+  if(r.nf!=null)$('nf').value=r.nf; if(r.thr!=null)$('thr').value=r.thr;
+  const sp=obj.sensorParams||{};
+  if(sp.rxH!=null)$('rxH').value=sp.rxH; if(sp.rxG!=null)$('rxG').value=sp.rxG;
+  const st=obj.study||{};
+  if(st.rad!=null)$('rad').value=st.rad; if(st.radials)$('radials').value=st.radials;
+  if(st.useTerrain!=null)$('useTerrain').checked=st.useTerrain;
+  if(obj.edgeLevel!=null){
+    edgeLevel=obj.edgeLevel; $('edgeSlider').value=edgeLevel; $('edgeVal').textContent=edgeLevel;
+    STOPS=buildStops(edgeLevel); RINGS=ringsFor(edgeLevel); buildLegend();
+  }
+  (obj.sensors||[]).forEach(s=>addSensor({lat:s.lat, lng:s.lng, name:s.name}));
+  if(sensors.length) selectSensor(0);
+  (obj.gateways||[]).forEach(g=>{
+    const gw=addGateway({lat:g.lat, lng:g.lng}, g.name);
+    if(g.params) gw.params={txH:g.params.txH, txP:g.params.txP, txG:g.params.txG};
+  });
+  if(gateways.length) selectGw(0);
+  else { $('gwName').value=''; $('gwElev').textContent='—'; refreshGwUI(); }
+  if('aerial' in obj && !!obj.aerial !== aerialOn) $('aerialToggle').click();
+  if(obj.view && isFinite(obj.view.lat)) map.setView([obj.view.lat, obj.view.lng], obj.view.zoom);
+  restoring=false;
+}
+
+const PRED_DEFAULTS={
+  gateways:[], sensors:[],
+  radio:{freq:915, bw:'125', nf:6, thr:-20},
+  sensorParams:{rxH:1.5, rxG:2},
+  study:{rad:10, radials:'180', useTerrain:true},
+  edgeLevel:-90
+};
+function resetPrediction(){ applyPredState(PRED_DEFAULTS); savePredNow(); status('Prediction elements reset.'); }
+function resetValidation(){ clearMeasurements(); status('Field-validation points reset.'); }
+
+/* ---------- crash-safe autosave for the prediction side (this device) ---------- */
+const PRED_KEY='jasperprop:prediction';
+let predAutosaveReady=false, predSaveTimer=null;
+function savePredNow(){ try{ localStorage.setItem(PRED_KEY, JSON.stringify(predState())); }catch(e){} }
+function schedulePredSave(){ if(!predAutosaveReady||restoring) return;
+  clearTimeout(predSaveTimer); predSaveTimer=setTimeout(savePredNow,400); }
+function loadPredFromStore(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem(PRED_KEY)||'null'); }catch(e){}
+  if(s && ((s.gateways&&s.gateways.length)||(s.sensors&&s.sensors.length))){
+    applyPredState(s);
+    if(gateways.length) runStudy();
+  }
+}
+$('panel').addEventListener('input', schedulePredSave);
+$('panel').addEventListener('change', schedulePredSave);
+map.on('moveend', schedulePredSave);
+
+/* ---------- save / open project (.jasperprop = JSON) ---------- */
+async function saveProject(){
+  const obj=Object.assign({format:'jasperprop', version:1, savedAt:new Date().toISOString()},
+    predState(),
+    {measurements: measurements.map(m=>({lat:m.lat, lng:m.lng, accuracy:m.accuracy,
+      rssi:m.rssi, note:m.note, time:m.time}))});
   const json=JSON.stringify(obj,null,2);
   // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
   if(window.showSaveFilePicker){
@@ -1656,52 +1783,14 @@ async function saveProject(){
 
 function loadProject(obj){
   if(!obj || obj.format!=='jasperprop') throw new Error('not a .jasperprop file');
-  // wipe current state (map layers + lists)
-  gateways.forEach(g=>map.removeLayer(g.marker)); gateways=[]; selIdx=-1; gwLatLng=null; gwSeq=0;
-  clearSensors();
-  if(overlay){map.removeLayer(overlay);overlay=null;}
-  if(contourLayer){map.removeLayer(contourLayer);contourLayer=null;}
-  if(linkLine){map.removeLayer(linkLine);linkLine=null;}
-  if(linkMarker){map.removeLayer(linkMarker);linkMarker=null;}
-  if(obstMarker){map.removeLayer(obstMarker);obstMarker=null;}
-  lastStudy=null; profileTarget=null; hud.style.display='none'; $('profBox').style.display='none';
-
-  // form fields
-  const r=obj.radio||{};
-  if(r.freq!=null)$('freq').value=r.freq; if(r.bw)$('bw').value=r.bw;
-  if(r.nf!=null)$('nf').value=r.nf; if(r.thr!=null)$('thr').value=r.thr;
-  const sp=obj.sensorParams||{};
-  if(sp.rxH!=null)$('rxH').value=sp.rxH; if(sp.rxG!=null)$('rxG').value=sp.rxG;
-  const st=obj.study||{};
-  if(st.rad!=null)$('rad').value=st.rad; if(st.radials)$('radials').value=st.radials;
-  if(st.useTerrain!=null)$('useTerrain').checked=st.useTerrain;
-
-  // coverage edge slider + ramp + legend
-  if(obj.edgeLevel!=null){
-    edgeLevel=obj.edgeLevel; $('edgeSlider').value=edgeLevel; $('edgeVal').textContent=edgeLevel;
-    STOPS=buildStops(edgeLevel); RINGS=ringsFor(edgeLevel); buildLegend();
-  }
-
   // field-validation points
   clearMeasurements();
   (obj.measurements||[]).forEach(m=>addMeasurement(m));
   if(measurements.length) selectMeasurement(0);
-
-  // sensors then gateways (override per-gateway params)
-  (obj.sensors||[]).forEach(s=>addSensor({lat:s.lat, lng:s.lng, name:s.name}));
-  if(sensors.length) selectSensor(0);
-  (obj.gateways||[]).forEach(g=>{
-    const gw=addGateway({lat:g.lat, lng:g.lng}, g.name);
-    if(g.params) gw.params={txH:g.params.txH, txP:g.params.txP, txG:g.params.txG};
-  });
-  if(gateways.length) selectGw(0);
-
-  // aerial state
-  if(!!obj.aerial !== aerialOn) $('aerialToggle').click();
-  // map view
-  if(obj.view && isFinite(obj.view.lat)) map.setView([obj.view.lat, obj.view.lng], obj.view.zoom);
-
+  // prediction side (wipes + rebuilds gateways/sensors/settings/view/aerial)
+  applyPredState(obj);
   showView('prediction');   // land in the prediction workspace (hides field points)
+  savePredNow();            // persist the freshly-loaded prediction state
   if(gateways.length) runStudy();
   else status(`Loaded project — ${sensors.length} sensor${sensors.length===1?'':'s'}, no gateways.`);
 }
@@ -1751,9 +1840,11 @@ $('clearBtn').onclick=()=>{
   status('Overlay cleared.');
 };
 
-/* ---------- restore field-validation points saved on this device ---------- */
-loadMeasFromStore();
+/* ---------- restore state saved on this device (crash-safe autosave) ---------- */
+loadPredFromStore();      // gateways, sensors, settings, view, aerial
+loadMeasFromStore();      // field-validation points
 showView('prediction');   // start in the prediction workspace (hides stored points)
+predAutosaveReady=true;   // begin autosaving prediction changes from here on
 </script>
 </body>
 </html>
