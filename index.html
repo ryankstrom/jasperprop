@@ -169,6 +169,7 @@
   <div class="hdr-actions">
     <button id="openBtn" class="hdr-btn" type="button" title="Open a .jasperprop project">📂 Open</button>
     <button id="saveBtn" class="hdr-btn" type="button" title="Save the project to a .jasperprop file">💾 Save</button>
+    <button id="resetAllBtn" class="hdr-btn" type="button" title="Reset both workspaces to defaults">↺ Reset All</button>
     <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
   </div>
   <button id="panelToggle" type="button" title="Hide panel">Hide panel ⟩</button>
@@ -1843,6 +1844,17 @@ $('resetValidBtn').onclick=()=>confirmDialog('Reset field validation?',
   'interpolated map on this device.</p>'+
   '<p class="muted">Your prediction gateways, sensors, and coverage are kept.</p>',
   'Reset validation', resetValidation);
+function resetAll(){
+  localStorage.removeItem(PRED_KEY);
+  localStorage.removeItem(MEAS_KEY);
+  localStorage.removeItem(VGW_KEY);
+  location.reload();
+}
+$('resetAllBtn').onclick=()=>confirmDialog('Reset everything?',
+  '<p>This clears <b>both</b> workspaces — all gateways, sensors, coverage, field-validation '+
+  'points, the reference gateway, and settings return to defaults.</p>'+
+  '<p class="muted">Anything not saved to a project file will be lost.</p>',
+  'Reset everything', resetAll);
 
 /* ---------- prediction state (shared by Save/Open and the autosave net) ---------- */
 function predState(){
