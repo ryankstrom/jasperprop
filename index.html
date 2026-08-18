@@ -358,6 +358,8 @@
       </fieldset>
       <fieldset>
         <legend>Selected point</legend>
+        <div class="row"><label>Name</label>
+          <span><input id="mName" type="text" placeholder="(no point)"></span></div>
         <div class="row"><label>RSSI</label>
           <span><input id="mRssi" type="number" min="-140" max="0" step="1"> dBm</span></div>
         <div class="row"><label>Note</label>
@@ -728,10 +730,14 @@ function measIconFor(m,sel){
     html:`<div class="meas-dot${sel?' sel':''}" style="background:${measColor(m)}"></div>`});
 }
 function measTip(m){
-  return (m.rssi!=null? m.rssi+' dBm' : '(no RSSI)') + (m.note? ' — '+m.note.replace(/[<>]/g,'') : '');
+  return m.name + (m.rssi!=null? ': '+m.rssi+' dBm' : '') + (m.note? ' — '+m.note.replace(/[<>]/g,'') : '');
 }
 function addMeasurement(p){
-  const m={ id:++measSeq, lat:p.lat, lng:p.lng,
+  let name;
+  if(p.name){ name=(''+p.name).replace(/[<>]/g,'');           // restored/named point
+    const mm=/^P(\d+)$/.exec(name); if(mm) measSeq=Math.max(measSeq, +mm[1]); }
+  else name='P'+(++measSeq);                                   // new point: next in sequence
+  const m={ name, lat:p.lat, lng:p.lng,
     accuracy:p.accuracy!=null?p.accuracy:null,
     rssi:p.rssi!=null?p.rssi:null, note:p.note||'', time:p.time||new Date().toISOString() };
   m.marker=L.marker([m.lat,m.lng],{icon:measIconFor(m,false), draggable:true, zIndexOffset:800})
@@ -746,6 +752,7 @@ function addMeasurement(p){
 function selectMeasurement(i){
   if(i<0||i>=measurements.length) return;
   selMeasIdx=i; const m=measurements[i];
+  $('mName').value = m.name||'';
   $('mRssi').value = m.rssi!=null?m.rssi:'';
   $('mNote').value = m.note||'';
   refreshMeasUI();
@@ -754,19 +761,19 @@ function removeMeasurement(i){
   if(i<0||i>=measurements.length) return;
   map.removeLayer(measurements[i].marker);
   measurements.splice(i,1); saveMeas();
-  if(!measurements.length){ selMeasIdx=-1; ['mRssi','mNote'].forEach(id=>$(id).value=''); refreshMeasUI(); return; }
+  if(!measurements.length){ selMeasIdx=-1; ['mName','mRssi','mNote'].forEach(id=>$(id).value=''); refreshMeasUI(); return; }
   selectMeasurement(Math.min(i,measurements.length-1));
 }
 function clearMeasurements(){
   measurements.forEach(m=>map.removeLayer(m.marker));
   measurements=[]; selMeasIdx=-1; measSeq=0;
-  ['mRssi','mNote'].forEach(id=>$(id).value='');
+  ['mName','mRssi','mNote'].forEach(id=>$(id).value='');
   refreshMeasUI(); saveMeas();
 }
 function refreshMeasUI(){
   const sel=$('measSel'); sel.innerHTML='';
   measurements.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i;
-    o.textContent=`P${i+1}`+(m.rssi!=null?` (${m.rssi} dBm)`:''); sel.appendChild(o); });
+    o.textContent=m.name+(m.rssi!=null?` (${m.rssi} dBm)`:''); sel.appendChild(o); });
   if(selMeasIdx>=0) sel.value=selMeasIdx;
   const cur=selMeasIdx>=0?measurements[selMeasIdx]:null;
   $('measInfo').textContent = measurements.length
@@ -780,7 +787,7 @@ function refreshMeasUI(){
 }
 function saveMeas(){
   try{ localStorage.setItem(MEAS_KEY, JSON.stringify(measurements.map(m=>({
-    id:m.id,lat:m.lat,lng:m.lng,accuracy:m.accuracy,rssi:m.rssi,note:m.note,time:m.time
+    name:m.name,lat:m.lat,lng:m.lng,accuracy:m.accuracy,rssi:m.rssi,note:m.note,time:m.time
   })))); }catch(e){/* storage unavailable / full */}
 }
 function loadMeasFromStore(){
@@ -801,6 +808,8 @@ $('measGps').onclick=()=>{
     err=>status('Location error: '+err.message),
     {enableHighAccuracy:true, timeout:10000, maximumAge:0});
 };
+$('mName').addEventListener('input',()=>{ const m=selMeas(); if(!m)return;
+  m.name=$('mName').value.replace(/[<>]/g,''); saveMeas(); refreshMeasUI(); });
 $('mRssi').addEventListener('input',()=>{ const m=selMeas(); if(!m)return;
   const v=$('mRssi').value.trim(); m.rssi = v===''?null:parseFloat(v); saveMeas(); refreshMeasUI(); });
 $('mNote').addEventListener('input',()=>{ const m=selMeas(); if(!m)return;
@@ -822,7 +831,7 @@ function buildKml(){
   let s='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n';
   s+='<name>JasperProp field validation</name>\n';
   measurements.forEach((m,i)=>{
-    const nm=`P${i+1}`+(m.rssi!=null?` (${m.rssi} dBm)`:'');
+    const nm=m.name+(m.rssi!=null?` (${m.rssi} dBm)`:'');
     s+='<Placemark>\n<name>'+xmlEsc(nm)+'</name>\n';
     s+='<Style><IconStyle><color>'+kmlColor(m)+'</color><scale>1.1</scale>'
       +'<Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>'
@@ -1752,7 +1761,7 @@ map.on('moveend', schedulePredSave);
 async function saveProject(){
   const obj=Object.assign({format:'jasperprop', version:1, savedAt:new Date().toISOString()},
     predState(),
-    {measurements: measurements.map(m=>({lat:m.lat, lng:m.lng, accuracy:m.accuracy,
+    {measurements: measurements.map(m=>({name:m.name, lat:m.lat, lng:m.lng, accuracy:m.accuracy,
       rssi:m.rssi, note:m.note, time:m.time}))});
   const json=JSON.stringify(obj,null,2);
   // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
