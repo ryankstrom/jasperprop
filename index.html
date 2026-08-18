@@ -698,8 +698,7 @@ function measTip(m){
 function addMeasurement(p){
   const m={ id:++measSeq, lat:p.lat, lng:p.lng,
     accuracy:p.accuracy!=null?p.accuracy:null,
-    rssi:p.rssi!=null?p.rssi:null, snr:p.snr!=null?p.snr:null,
-    sf:p.sf||'', note:p.note||'', time:p.time||new Date().toISOString() };
+    rssi:p.rssi!=null?p.rssi:null, note:p.note||'', time:p.time||new Date().toISOString() };
   m.marker=L.marker([m.lat,m.lng],{icon:measIconFor(m,false), draggable:true, zIndexOffset:800})
     .addTo(map).bindTooltip(measTip(m));
   m.marker.on('click', ()=>selectMeasurement(measurements.indexOf(m)));
@@ -746,7 +745,7 @@ function refreshMeasUI(){
 }
 function saveMeas(){
   try{ localStorage.setItem(MEAS_KEY, JSON.stringify(measurements.map(m=>({
-    id:m.id,lat:m.lat,lng:m.lng,accuracy:m.accuracy,rssi:m.rssi,snr:m.snr,sf:m.sf,note:m.note,time:m.time
+    id:m.id,lat:m.lat,lng:m.lng,accuracy:m.accuracy,rssi:m.rssi,note:m.note,time:m.time
   })))); }catch(e){/* storage unavailable / full */}
 }
 function loadMeasFromStore(){
@@ -796,8 +795,6 @@ function buildKml(){
     s+='<ExtendedData>\n';
     const add=(k,v)=>{ s+='<Data name="'+k+'"><value>'+xmlEsc(v)+'</value></Data>\n'; };
     if(m.rssi!=null) add('rssi_dbm',m.rssi);
-    if(m.snr!=null)  add('snr_db',m.snr);
-    if(m.sf)         add('spreading_factor',m.sf);
     if(m.accuracy!=null) add('gps_accuracy_m',Math.round(m.accuracy));
     add('time',m.time);
     if(m.note) add('note',m.note);
@@ -1628,7 +1625,7 @@ async function saveProject(){
     view:     {lat:map.getCenter().lat, lng:map.getCenter().lng, zoom:map.getZoom()},
     aerial:   aerialOn,
     measurements: measurements.map(m=>({lat:m.lat, lng:m.lng, accuracy:m.accuracy,
-      rssi:m.rssi, snr:m.snr, sf:m.sf, note:m.note, time:m.time}))
+      rssi:m.rssi, note:m.note, time:m.time}))
   };
   const json=JSON.stringify(obj,null,2);
   // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
