@@ -133,14 +133,14 @@
   details.g-other>summary{background:var(--slate-dd)}
   details.g-valid>summary{background:#4f6b8f}
   .modegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  /* top-level workspace tabs */
-  .tabs{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}
-  .tab{flex:1;width:auto;background:#fff;color:var(--slate);border:0;border-radius:0;
-    padding:10px 6px;font-size:13.5px;font-weight:600;cursor:pointer}
-  .tab+.tab{border-left:1px solid var(--line)}
-  .tab:hover{background:var(--paper)}
-  .tab.active{background:var(--slate);color:#fff}
-  .tab.active:hover{background:var(--slate-d)}
+  /* top-level workspace switcher — an underlined tab bar (distinct from any button) */
+  .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin:2px 0 6px}
+  .tab{flex:1;width:auto;background:transparent;color:var(--muted);cursor:pointer;
+    border:0;border-bottom:3px solid transparent;border-radius:7px 7px 0 0;margin-bottom:-2px;
+    padding:12px 6px 11px;font-family:var(--serif);font-size:16px;font-weight:600;letter-spacing:.2px}
+  .tab:hover{background:rgba(0,0,0,.03);color:var(--slate)}
+  .tab.active{background:transparent;color:var(--slate);border-bottom-color:var(--accent)}
+  .tab.active:hover{background:transparent}
   /* confirmation modal */
   #modalBackdrop{position:fixed;inset:0;z-index:3000;display:none;padding:20px;
     background:rgba(20,28,30,.5);align-items:center;justify-content:center}
