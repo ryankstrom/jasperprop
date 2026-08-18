@@ -342,6 +342,10 @@
         pairs your location with the measured RSSI and an optional note. Points auto-save on
         this device — export to KML/KMZ (or Save the project) for a permanent copy.</p>
 
+      <div class="row">
+        <button class="sec modebtn active" id="vModeReading" style="width:100%;padding:8px 5px;font-size:13px">📋 Add reading</button>
+      </div>
+
       <fieldset>
         <legend>Points</legend>
         <div class="row"><button class="sec" id="measGps" style="width:100%">📍 Add at my location (GPS)</button></div>
@@ -366,6 +370,26 @@
           <span><input id="mNote" type="text" placeholder="(optional)"></span></div>
         <div class="row"><span class="hint" id="mMeta" style="flex:1">—</span></div>
       </fieldset>
+      <div class="row">
+        <button class="sec modebtn" id="vModeGw" style="width:100%;padding:8px 5px;font-size:13px"><img class="gw-ico" id="vgBtnIco" src="brand/jasper-icon-cyan.svg" alt=""> Set Single Gateway</button>
+      </div>
+      <fieldset>
+        <legend>Reference gateway</legend>
+        <div class="row"><span class="hint" id="vgHint">Tap <b>Set Single Gateway</b> above, then the map, to place the transmitter your readings are for.</span></div>
+        <div class="row"><label>Name</label>
+          <span><input id="vgName" type="text" placeholder="(no gateway)"></span></div>
+        <div class="row"><label>Antenna height AGL</label>
+          <span><input id="vgTxH" type="number" value="10" min="1" max="200" step="1"> m</span></div>
+        <div class="row"><label>TX power (EIRP-ish)</label>
+          <span><input id="vgTxP" type="number" value="14" min="-10" max="36" step="1"> dBm</span></div>
+        <div class="row"><label>Gateway ant. gain</label>
+          <span><input id="vgTxG" type="number" value="3" min="0" max="15" step="0.5"> dBi</span></div>
+        <div class="row"><label>Ground elevation</label>
+          <span id="vgElev" style="font-weight:600;color:var(--muted)">—</span></div>
+        <div class="row"><button class="sec" id="vgRemove" style="width:auto;flex:none;padding:7px 12px;margin-left:auto;display:none">Remove gateway</button></div>
+      </fieldset>
+      <button id="interpBtn" disabled>⧉ Interpolate coverage</button>
+      <div class="row"><span class="hint">Residual-corrected: the model from the reference gateway, tuned toward your measured points.</span></div>
       <fieldset>
         <legend>Export</legend>
         <div class="row" style="gap:8px">
@@ -470,6 +494,9 @@ let linkLine = null;
 let linkMarker = null;
 let obstMarker = null;
 let profileTarget = null;        // last endpoint clicked in Draw Profile mode
+let vGateway = null;             // validation-only reference gateway {name,lat,lng,params,marker,z0}
+let interpOverlay = null;        // interpolated (measured) coverage image
+let interpContourLayer = null;   // interpolated coverage iso-lines
 
 /* ---------- multi-gateway model ---------- */
 let gateways = [];               // {id,name,lat,lng,marker,params:{txH,txP,txG},study}
@@ -486,6 +513,9 @@ map.on('click', e => {
   } else if(mode==='validate'){
     addMeasurement({lat:e.latlng.lat, lng:e.latlng.lng});
     status('Point added — enter the RSSI in Field Validation.');
+  } else if(mode==='vgateway'){
+    setVGateway(e.latlng);
+    status('Reference gateway placed — set its height/power, then Interpolate.');
   } else {
     addGateway(e.latlng);
     runStudy();
@@ -866,6 +896,136 @@ $('expKmz').onclick=async ()=>{
   status(`Exported ${measurements.length} point${measurements.length>1?'s':''} to KMZ.`);
 };
 
+/* ---------- validation reference gateway (single, validation-only) ---------- */
+const VGW_KEY='jasperprop:vgateway';
+function saveVGateway(){
+  try{ localStorage.setItem(VGW_KEY, vGateway
+    ? JSON.stringify({name:vGateway.name, lat:vGateway.lat, lng:vGateway.lng, params:{...vGateway.params}})
+    : ''); }catch(e){}
+}
+function refreshVGwUI(){
+  const g=vGateway;
+  $('vgName').value = g ? g.name : '';
+  $('vgTxH').value  = g ? g.params.txH : 10;
+  $('vgTxP').value  = g ? g.params.txP : 14;
+  $('vgTxG').value  = g ? g.params.txG : 3;
+  $('vgElev').textContent = (g && g.z0!=null) ? Math.round(g.z0)+' m' : '—';
+  $('vgHint').style.display = g ? 'none' : '';
+  $('vgRemove').style.display = g ? '' : 'none';
+  $('interpBtn').disabled = !g;
+}
+function setVGateway(latlng, data){
+  if(!vGateway){
+    vGateway={ name:(data&&data.name)||'Gateway', lat:latlng.lat, lng:latlng.lng,
+      params:(data&&data.params)||{txH:num('vgTxH')||10, txP:num('vgTxP')||14, txG:num('vgTxG')||3}, z0:null };
+    vGateway.marker=L.marker([vGateway.lat,vGateway.lng],{draggable:true, icon:gwIconSel, zIndexOffset:1100})
+      .addTo(map).bindTooltip(vGateway.name);
+    vGateway.marker.on('dragend',()=>{ const p=vGateway.marker.getLatLng(); vGateway.lat=p.lat; vGateway.lng=p.lng; vGateway.z0=null; saveVGateway(); refreshVGwUI(); });
+  } else {
+    vGateway.lat=latlng.lat; vGateway.lng=latlng.lng; vGateway.z0=null;
+    vGateway.marker.setLatLng([vGateway.lat,vGateway.lng]);
+  }
+  saveVGateway(); refreshVGwUI();
+}
+function removeVGateway(){
+  if(vGateway){ map.removeLayer(vGateway.marker); vGateway=null; }
+  if(interpOverlay){ map.removeLayer(interpOverlay); interpOverlay=null; }
+  if(interpContourLayer){ map.removeLayer(interpContourLayer); interpContourLayer=null; }
+  saveVGateway(); refreshVGwUI();
+}
+['vgName','vgTxH','vgTxP','vgTxG'].forEach(id=>$(id).addEventListener('input',()=>{
+  if(!vGateway) return;
+  if(id==='vgName'){ vGateway.name=$('vgName').value.replace(/[<>]/g,''); vGateway.marker.setTooltipContent(vGateway.name); }
+  else vGateway.params={txH:num('vgTxH'), txP:num('vgTxP'), txG:num('vgTxG')};
+  saveVGateway();
+}));
+$('vgRemove').onclick=removeVGateway;
+function loadVGatewayFromStore(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem(VGW_KEY)||'null'); }catch(e){}
+  if(s && isFinite(s.lat)){ setVGateway({lat:s.lat,lng:s.lng}, s); }
+  else refreshVGwUI();
+}
+
+/* ---------- Interpolate: residual-corrected coverage from field points ---------- */
+async function interpolateValidation(){
+  if(!vGateway){ status('Place a reference gateway first (Set Single Gateway).'); return; }
+  const pts=measurements.filter(m=>m.rssi!=null && isFinite(m.rssi));
+  if(pts.length<2){ status('Add at least 2 points with an RSSI value.'); return; }
+  $('interpBtn').disabled=true;
+  status('Interpolating…'); await new Promise(r=>setTimeout(r,0));
+
+  const rxH=num('rxH'), rxG=num('rxG'), f=num('freq'), bw=num('bw'), nf=num('nf');
+  const maxR=num('rad')*1000, nRad=parseInt($('radials').value,10);
+  const useTerrain=$('useTerrain').checked;
+  const lambda=C/(f*1e6), noiseFloor=-174+10*Math.log10(bw*1000)+nf;
+
+  const g=vGateway;
+  const [nLat]=destPoint(g.lat,g.lng,0,maxR), [sLat]=destPoint(g.lat,g.lng,Math.PI,maxR);
+  const [,eLon]=destPoint(g.lat,g.lng,Math.PI/2,maxR), [,wLon]=destPoint(g.lat,g.lng,-Math.PI/2,maxR);
+  const bounds={n:nLat,s:sLat,e:eLon,w:wLon,distM:maxR};
+
+  let terrain=null;
+  if(useTerrain){ terrain=await loadTerrain(bounds,(nLat+sLat)/2); }
+
+  const step=Math.max(30, maxR/200), nSteps=Math.floor(maxR/step);
+  const geo={nRad,nSteps,step,f,lambda,rxH,rxG,noiseFloor};
+  const {grid,z0}=gatewayGrid(g, terrain, geo);
+  g.z0=z0; refreshVGwUI();
+  const S={nRad,nSteps,step,maxR:nSteps*step};
+  const cosG=Math.cos(toRad(g.lat));
+  function predAt(la,lo){
+    const dx=toRad(lo-g.lng)*cosG*RE, dy=toRad(la-g.lat)*RE, d=Math.hypot(dx,dy);
+    if(d>S.maxR) return null;
+    let brng=Math.atan2(dx,dy); if(brng<0)brng+=2*Math.PI;
+    return sampleGrid(grid,S,brng,d)+noiseFloor;
+  }
+  // residual = measured - predicted, at each point in range
+  const res=[];
+  for(const m of pts){ const pr=predAt(m.lat,m.lng); if(pr!=null) res.push({lat:m.lat,lng:m.lng,r:m.rssi-pr}); }
+  if(!res.length){ status('Points are outside the gateway’s range — increase Max radius.'); $('interpBtn').disabled=false; return; }
+
+  renderInterp(bounds, g, grid, S, noiseFloor, res, predAt);
+  status(`Interpolated ${res.length} point${res.length>1?'s':''} (measured − predicted, residual-corrected).`);
+  $('interpBtn').disabled=false;
+}
+
+function renderInterp(bounds, g, grid, S, noiseFloor, res){
+  const midLat=(bounds.n+bounds.s)/2;
+  const lonSpanM=toRad(bounds.e-bounds.w)*Math.cos(toRad(midLat))*RE;
+  const latSpanM=toRad(bounds.n-bounds.s)*RE;
+  const W=860; let H=Math.round(W*latSpanM/lonSpanM); H=Math.max(160,Math.min(1600,H));
+  const buf=new Float32Array(W*H).fill(-9999);
+  const edge=new Float32Array(W*H).fill(1);
+  const cosG=Math.cos(toRad(g.lat));
+  const cosArr=res.map(p=>Math.cos(toRad(p.lat)));
+  const IDW_R=1200, IDW_R2=IDW_R*IDW_R;   // residual influence radius (m); beyond it → pure model
+  for(let y=0;y<H;y++){
+    const la=bounds.n+(bounds.s-bounds.n)*(y/(H-1));
+    for(let x=0;x<W;x++){
+      const lo=bounds.w+(bounds.e-bounds.w)*(x/(W-1));
+      const dx=toRad(lo-g.lng)*cosG*RE, dy=toRad(la-g.lat)*RE, d=Math.sqrt(dx*dx+dy*dy);
+      const i=y*W+x;
+      if(d>S.maxR) continue;
+      let brng=Math.atan2(dx,dy); if(brng<0)brng+=2*Math.PI;
+      const pred=sampleGrid(grid,S,brng,d)+noiseFloor;
+      let wsum=0,rsum=0;
+      for(let k=0;k<res.length;k++){ const p=res[k];
+        const ex=toRad(lo-p.lng)*cosArr[k]*RE, ey=toRad(la-p.lat)*RE, dd2=ex*ex+ey*ey;
+        if(dd2>IDW_R2) continue;
+        if(dd2<1){ rsum=p.r; wsum=1; break; }
+        const wgt=1/dd2; wsum+=wgt; rsum+=wgt*p.r;
+      }
+      buf[i]=pred + (wsum>0? rsum/wsum : 0);
+      edge[i]=d/S.maxR;
+    }
+  }
+  if(interpOverlay) map.removeLayer(interpOverlay);
+  if(interpContourLayer) map.removeLayer(interpContourLayer);
+  const r=paintFieldOverlay(bounds, buf, edge, W, H);
+  interpOverlay=r.overlay; interpContourLayer=r.contourLayer;
+}
+$('interpBtn').onclick=interpolateValidation;
+
 /* ---------- color map (quantized SNR bands, used by the hover HUD) ---------- */
 // stops as [snr_dB, [r,g,b]]
 const SNR_STOPS = [
@@ -1069,6 +1229,34 @@ function runStudy(){
   }),20);
 }
 
+// one gateway's polar SNR grid over a shared sampling geometry
+function gatewayGrid(gw, terrain, geo){
+  const {nRad,nSteps,step,f,lambda,rxH,rxG,noiseFloor}=geo;
+  const elevAt=(la,lo)=> terrain ? terrain.elev(la,lo) : 0;
+  const eirp=gw.params.txP+gw.params.txG;
+  const z0=elevAt(gw.lat,gw.lng);
+  const txAbs=z0+gw.params.txH;
+  const grid=new Float32Array(nRad*nSteps);
+  let rangeToThr=0;
+  for(let a=0;a<nRad;a++){
+    const brng=a/nRad*2*Math.PI;
+    const prof=new Float32Array(nSteps+1), dist=new Float32Array(nSteps+1);
+    prof[0]=z0; dist[0]=0;
+    for(let i=1;i<=nSteps;i++){ const d=i*step; const [la,lo]=destPoint(gw.lat,gw.lng,brng,d); prof[i]=elevAt(la,lo); dist[i]=d; }
+    for(let i=1;i<=nSteps;i++){
+      const d=dist[i], rxAbs=prof[i]+rxH;
+      let vmax=-Infinity;
+      for(let j=1;j<i;j++){ const d1=dist[j], d2=d-d1; if(d2<=0) continue;
+        const losH=txAbs+(rxAbs-txAbs)*(d1/d), bulge=d1*d2/(2*KFACTOR*RE);
+        const h=(prof[j]+bulge)-losH, v=h*Math.sqrt(2*d/(lambda*d1*d2)); if(v>vmax) vmax=v; }
+      const diff=vmax===-Infinity?0:knifeEdgeLoss(vmax);
+      const fspl=20*Math.log10(d)+20*Math.log10(f*1e6)-147.55;
+      grid[a*nSteps+(i-1)]=(eirp+rxG-fspl-diff)-noiseFloor;   // stored as SNR
+    }
+  }
+  return {grid, z0, rangeToThr};
+}
+
 async function compute(){
   const rxH=num('rxH'), rxG=num('rxG');
   const f=num('freq'), bw=num('bw'), nf=num('nf'), thr=num('thr');
@@ -1103,54 +1291,13 @@ async function compute(){
   const step=Math.max(30, maxR/200);
   const nSteps=Math.floor(maxR/step);
   lastStudy={nRad,nSteps,step,noiseFloor,thr,maxR:nSteps*step};
+  const geo={nRad,nSteps,step,f,lambda,rxH,rxG,noiseFloor};
 
   for(let gi=0; gi<gateways.length; gi++){
     const gw=gateways[gi];
     status(`Computing path loss — ${gw.name} (${gi+1}/${gateways.length})…`);
     await new Promise(r=>setTimeout(r,0));
-    const eirp=gw.params.txP+gw.params.txG;
-    const z0=elevAt(gw.lat,gw.lng);
-    const txAbs=z0+gw.params.txH;
-
-    // polar grid of SNR  [radial][ring]
-    const grid=new Float32Array(nRad*nSteps);
-    let rangeToThr=0;
-    for(let a=0;a<nRad;a++){
-      const brng=a/nRad*2*Math.PI;
-      const prof=new Float32Array(nSteps+1);
-      const dist=new Float32Array(nSteps+1);
-      prof[0]=z0; dist[0]=0;
-      for(let i=1;i<=nSteps;i++){
-        const d=i*step;
-        const [la,lo]=destPoint(gw.lat,gw.lng,brng,d);
-        prof[i]=elevAt(la,lo);
-        dist[i]=d;
-      }
-      let radialThr=0;
-      for(let i=1;i<=nSteps;i++){
-        const d=dist[i];
-        const rxAbs=prof[i]+rxH;
-        // worst-case Fresnel parameter along profile (single knife edge)
-        let vmax=-Infinity;
-        for(let j=1;j<i;j++){
-          const d1=dist[j], d2=d-d1;
-          if(d2<=0) continue;
-          const losH=txAbs + (rxAbs-txAbs)*(d1/d);
-          const bulge=d1*d2/(2*KFACTOR*RE);
-          const h=(prof[j]+bulge)-losH; // obstruction above LOS
-          const v=h*Math.sqrt(2*d/(lambda*d1*d2));
-          if(v>vmax) vmax=v;
-        }
-        const diff = vmax===-Infinity ? 0 : knifeEdgeLoss(vmax);
-        const fspl = 20*Math.log10(d) + 20*Math.log10(f*1e6) - 147.55; // d in m
-        const rssi = eirp + rxG - fspl - diff;
-        const snr  = rssi - noiseFloor;
-        grid[a*nSteps + (i-1)] = snr;
-        if(snr>=thr) radialThr=d;
-      }
-      if(radialThr>rangeToThr) rangeToThr=radialThr;
-    }
-    gw.study={grid,z0,rangeToThr};
+    gw.study=gatewayGrid(gw, terrain, geo);
   }
 
   status('Rendering composite coverage…');
@@ -1335,30 +1482,29 @@ function renderComposite(bounds){
     }
   }
 
-  // pass 2: paint fill
+  if(overlay) map.removeLayer(overlay);
+  if(contourLayer) map.removeLayer(contourLayer);
+  const r=paintFieldOverlay(bounds, buf, edge, W, H);
+  overlay=r.overlay; contourLayer=r.contourLayer;
+}
+
+// shared RSSI-field renderer: fill (canvas image overlay) + vector iso-lines
+function paintFieldOverlay(bounds, buf, edge, W, H){
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const ctx=cv.getContext('2d');
-  const img=ctx.createImageData(W,H);
-  const px=img.data;
+  const img=ctx.createImageData(W,H); const px=img.data;
   for(let i=0;i<W*H;i++){
     const v=buf[i], o=i*4;
     if(v<-138){ px[o+3]=0; continue; }
     const c=rssiColor(v);
     px[o]=c[0]; px[o+1]=c[1]; px[o+2]=c[2];
-    // fade near the study boundary so the edge isn't a hard circle
     const ef=edge[i];
     px[o+3]= ef>0.92 ? Math.round(150*(1-(ef-0.92)/0.08)) : 150;
   }
-
   ctx.putImageData(img,0,0);
-
-  if(overlay) map.removeLayer(overlay);
-  overlay=L.imageOverlay(cv.toDataURL(),[[bounds.s,bounds.w],[bounds.n,bounds.e]],
+  const ov=L.imageOverlay(cv.toDataURL(),[[bounds.s,bounds.w],[bounds.n,bounds.e]],
     {opacity:0.8,interactive:false}).addTo(map);
-
-  // pass 3: vector iso-lines from the composite field
-  if(contourLayer) map.removeLayer(contourLayer);
-  contourLayer=L.layerGroup().addTo(map);
+  const cl=L.layerGroup().addTo(map);
   const toLL=p=>[bounds.n+(bounds.s-bounds.n)*(p[1]/(H-1)),
                  bounds.w+(bounds.e-bounds.w)*(p[0]/(W-1))];
   let sm=smoothField(buf,W,H); sm=smoothField(sm,W,H);
@@ -1368,17 +1514,15 @@ function renderComposite(bounds){
     const w=ring.major?5:2.5;
     for(const line of lines){
       const ll=line.map(toLL);
-      // white casing on the major edge so it pops over any fill
       if(ring.major){
         L.polyline(ll,{renderer:contourRenderer,color:'#ffffff',weight:w+3,
-          opacity:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'})
-          .addTo(contourLayer);
+          opacity:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'}).addTo(cl);
       }
       L.polyline(ll,{renderer:contourRenderer,color:ring.color,weight:w,
-        opacity:ring.major?1:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'})
-        .addTo(contourLayer);
+        opacity:ring.major?1:0.85,smoothFactor:1,lineJoin:'round',lineCap:'round'}).addTo(cl);
     }
   }
+  return {overlay:ov, contourLayer:cl};
 }
 
 /* ---------- link terrain profile ---------- */
@@ -1613,7 +1757,13 @@ function predictionLayers(){
   if(obstMarker)a.push(obstMarker);
   return a;
 }
-function validationLayers(){ return measurements.map(m=>m.marker); }
+function validationLayers(){
+  const a=measurements.map(m=>m.marker);
+  if(vGateway) a.push(vGateway.marker);
+  if(interpOverlay) a.push(interpOverlay);
+  if(interpContourLayer) a.push(interpContourLayer);
+  return a;
+}
 function setLayers(list,show){ list.forEach(l=>{ if(show){ if(!map.hasLayer(l)) map.addLayer(l); }
   else if(map.hasLayer(l)) map.removeLayer(l); }); }
 
@@ -1628,10 +1778,22 @@ function showView(v){
   setLayers(validationLayers(), !pred);
   setLayers(predictionLayers(), pred);
   if(!pred) hud.style.display='none';
-  setMode(pred ? 'gateway' : 'validate');
+  if(pred) setMode('gateway'); else setValidMode('reading');
 }
 $('tabPred').onclick=()=>showView('prediction');
 $('tabValid').onclick=()=>showView('validation');
+
+/* ---------- validation workspace mode (add reading vs set gateway) ---------- */
+function setValidMode(m){   // 'reading' | 'gateway'
+  mode = m==='gateway' ? 'vgateway' : 'validate';
+  $('vModeReading').classList.toggle('active', m==='reading');
+  $('vModeGw').classList.toggle('active', m==='gateway');
+  $('vgBtnIco').src = m==='gateway' ? 'brand/jasper-icon-white.svg' : 'brand/jasper-icon-cyan.svg';
+  status(m==='gateway' ? 'Tap the map to place / move the reference gateway.'
+                       : 'Tap the map at your reading, then enter the RSSI.');
+}
+$('vModeReading').onclick=()=>setValidMode('reading');
+$('vModeGw').onclick=()=>setValidMode('gateway');
 
 /* ---------- live hover readout ---------- */
 const hud=$('hud');
@@ -1677,8 +1839,9 @@ $('resetPredBtn').onclick=()=>confirmDialog('Reset prediction?',
   '<p class="muted">Your field-validation points are kept.</p>',
   'Reset prediction', resetPrediction);
 $('resetValidBtn').onclick=()=>confirmDialog('Reset field validation?',
-  '<p>This deletes all <b>field-validation points</b> saved on this device.</p>'+
-  '<p class="muted">Your gateways, sensors, and coverage are kept.</p>',
+  '<p>This deletes all <b>field-validation points</b>, the <b>reference gateway</b>, and the '+
+  'interpolated map on this device.</p>'+
+  '<p class="muted">Your prediction gateways, sensors, and coverage are kept.</p>',
   'Reset validation', resetValidation);
 
 /* ---------- prediction state (shared by Save/Open and the autosave net) ---------- */
@@ -1738,7 +1901,7 @@ const PRED_DEFAULTS={
   edgeLevel:-90
 };
 function resetPrediction(){ applyPredState(PRED_DEFAULTS); savePredNow(); status('Prediction elements reset.'); }
-function resetValidation(){ clearMeasurements(); status('Field-validation points reset.'); }
+function resetValidation(){ clearMeasurements(); removeVGateway(); status('Field-validation elements reset.'); }
 
 /* ---------- crash-safe autosave for the prediction side (this device) ---------- */
 const PRED_KEY='jasperprop:prediction';
@@ -1762,7 +1925,8 @@ async function saveProject(){
   const obj=Object.assign({format:'jasperprop', version:1, savedAt:new Date().toISOString()},
     predState(),
     {measurements: measurements.map(m=>({name:m.name, lat:m.lat, lng:m.lng, accuracy:m.accuracy,
-      rssi:m.rssi, note:m.note, time:m.time}))});
+      rssi:m.rssi, note:m.note, time:m.time})),
+     vgateway: vGateway ? {name:vGateway.name, lat:vGateway.lat, lng:vGateway.lng, params:{...vGateway.params}} : null});
   const json=JSON.stringify(obj,null,2);
   // "Save As" with a location picker where supported (Chrome/Edge over HTTPS)
   if(window.showSaveFilePicker){
@@ -1792,10 +1956,12 @@ async function saveProject(){
 
 function loadProject(obj){
   if(!obj || obj.format!=='jasperprop') throw new Error('not a .jasperprop file');
-  // field-validation points
+  // field-validation points + reference gateway
   clearMeasurements();
   (obj.measurements||[]).forEach(m=>addMeasurement(m));
   if(measurements.length) selectMeasurement(0);
+  removeVGateway();
+  if(obj.vgateway && isFinite(obj.vgateway.lat)) setVGateway({lat:obj.vgateway.lat, lng:obj.vgateway.lng}, obj.vgateway);
   // prediction side (wipes + rebuilds gateways/sensors/settings/view/aerial)
   applyPredState(obj);
   showView('prediction');   // land in the prediction workspace (hides field points)
@@ -1852,6 +2018,7 @@ $('clearBtn').onclick=()=>{
 /* ---------- restore state saved on this device (crash-safe autosave) ---------- */
 loadPredFromStore();      // gateways, sensors, settings, view, aerial
 loadMeasFromStore();      // field-validation points
+loadVGatewayFromStore();  // validation reference gateway
 showView('prediction');   // start in the prediction workspace (hides stored points)
 predAutosaveReady=true;   // begin autosaving prediction changes from here on
 </script>
