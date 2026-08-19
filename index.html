@@ -104,6 +104,20 @@
     box-shadow:0 1px 5px rgba(0,0,0,.18);user-select:none}
   #aerialToggle:hover{background:#fff;border-color:var(--accent)}
   #aerialToggle.on{background:var(--slate);color:#fff;border-color:var(--slate)}
+  /* locate-me button (below the aerial toggle) */
+  #locateBtn{position:absolute;top:56px;right:16px;z-index:1000;width:38px;height:38px;
+    display:flex;align-items:center;justify-content:center;padding:0;
+    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:9px;
+    color:var(--slate);cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.18)}
+  #locateBtn:hover{background:#fff;border-color:var(--accent);color:var(--accent-d)}
+  #locateBtn.active{color:#1a73e8;border-color:#1a73e8}
+  #locateBtn svg{width:20px;height:20px;display:block}
+  /* live device-location dot (both modules) */
+  .geo-dot{width:15px;height:15px;border-radius:50%;background:#1a73e8;border:2.5px solid #fff;
+    box-shadow:0 0 0 1px rgba(26,115,232,.45),0 1px 4px rgba(0,0,0,.45);position:relative}
+  .geo-dot::after{content:'';position:absolute;inset:-6px;border-radius:50%;
+    background:rgba(26,115,232,.25);animation:geopulse 2s ease-out infinite}
+  @keyframes geopulse{0%{transform:scale(.5);opacity:.7}100%{transform:scale(1.9);opacity:0}}
   /* Jasper gateway marker */
   .gw-badge{width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid var(--slate);
     box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
@@ -177,6 +191,13 @@
 <div id="app">
   <div id="map">
     <button id="aerialToggle" type="button">🛰 <span id="aerialLbl">Aerial</span></button>
+    <button id="locateBtn" type="button" title="Zoom to my location" aria-label="Zoom to my location">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="6"></circle>
+        <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+        <line x1="12" y1="1.5" x2="12" y2="4.5"></line><line x1="12" y1="19.5" x2="12" y2="22.5"></line>
+        <line x1="1.5" y1="12" x2="4.5" y2="12"></line><line x1="19.5" y1="12" x2="22.5" y2="12"></line>
+      </svg></button>
     <div id="hud"></div></div>
   <div id="panel">
     <div class="tabs">
@@ -393,10 +414,7 @@
       <div class="row"><span class="hint">Residual-corrected: the model from the reference gateway, tuned toward your measured points.</span></div>
       <fieldset>
         <legend>Export</legend>
-        <div class="row" style="gap:8px">
-          <button class="sec" id="expKml" style="flex:1">Export KML</button>
-          <button class="sec" id="expKmz" style="flex:1">Export KMZ</button>
-        </div>
+        <div class="row"><button class="sec" id="expKml" style="width:100%">Export KML</button></div>
         <div class="row"><span class="hint">Points auto-save on this device; export for a permanent file.</span></div>
       </fieldset>
       <div class="row"><button class="sec" id="resetValidBtn" style="width:100%;color:#b3382c">↺ Reset Validation Elements</button></div>
@@ -481,6 +499,32 @@ $('aerialToggle').onclick = ()=>{
   }
   if(typeof schedulePredSave==='function') schedulePredSave();
 };
+
+// live device location — a blue "you are here" dot + accuracy circle, shown in
+// both workspaces (added straight to the map, so the tab switch never hides it)
+let geoDot=null, geoAccCircle=null, geoWatchId=null, geoRecenter=true;
+const geoIcon=L.divIcon({className:'geo-wrap', html:'<div class="geo-dot"></div>', iconSize:[15,15], iconAnchor:[7.5,7.5]});
+function updateGeo(pos){
+  const c=pos.coords, ll=[c.latitude,c.longitude];
+  if(!geoDot){
+    geoAccCircle=L.circle(ll,{radius:c.accuracy,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12,interactive:false}).addTo(map);
+    geoDot=L.marker(ll,{icon:geoIcon,interactive:false,keyboard:false,zIndexOffset:2000}).addTo(map);
+    $('locateBtn').classList.add('active');
+  } else { geoDot.setLatLng(ll); geoAccCircle.setLatLng(ll).setRadius(c.accuracy); }
+  if(geoRecenter){ map.setView(ll, Math.max(map.getZoom(),16)); geoRecenter=false; }
+  status(`Location found (±${Math.round(c.accuracy)} m).`);
+}
+function geoError(err){ status('Location error: '+err.message); }
+$('locateBtn').onclick=()=>{
+  if(!navigator.geolocation){ status('Geolocation is not available in this browser.'); return; }
+  geoRecenter=true;                       // every press recenters on the newest fix
+  if(geoDot) map.setView(geoDot.getLatLng(), Math.max(map.getZoom(),16));
+  if(geoWatchId==null){
+    status('Locating…');
+    geoWatchId=navigator.geolocation.watchPosition(updateGeo, geoError, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
+  }
+};
+L.DomEvent.disableClickPropagation($('locateBtn'));
 
 let gwLatLng = null;             // latlng of the SELECTED gateway (profile source)
 let overlay = null;
@@ -889,14 +933,6 @@ $('expKml').onclick=()=>{
   downloadBlob(new Blob([buildKml()],{type:'application/vnd.google-earth.kml+xml'}),'field_validation.kml');
   status(`Exported ${measurements.length} point${measurements.length>1?'s':''} to KML.`);
 };
-$('expKmz').onclick=async ()=>{
-  if(!measurements.length){ status('No validation points to export.'); return; }
-  const zip=new JSZip(); zip.file('doc.kml', buildKml());
-  const blob=await zip.generateAsync({type:'blob', mimeType:'application/vnd.google-earth.kmz'});
-  downloadBlob(blob,'field_validation.kmz');
-  status(`Exported ${measurements.length} point${measurements.length>1?'s':''} to KMZ.`);
-};
-
 /* ---------- validation reference gateway (single, validation-only) ---------- */
 const VGW_KEY='jasperprop:vgateway';
 function saveVGateway(){
