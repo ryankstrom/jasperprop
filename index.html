@@ -212,16 +212,17 @@
       padding:0 12px calc(12px + env(safe-area-inset-bottom));transition:height .25s ease;
       overscroll-behavior:contain}
     #app.dragging #panel{transition:none}
+    /* a full-width, finger-sized strip to grab, with a gap so it isn't mistaken for the tabs */
     .sheet-handle{display:flex;position:sticky;top:0;z-index:2;justify-content:center;align-items:center;
-      height:26px;margin:0 -12px;background:var(--paper);cursor:grab;touch-action:none}
-    .sheet-handle span{width:42px;height:5px;border-radius:3px;background:#b9bfb6}
+      height:44px;margin:0 -12px 4px;background:var(--paper);cursor:grab;touch-action:none}
+    .sheet-handle span{width:56px;height:6px;border-radius:3px;background:#a9b0a6}
     .tabs{margin-top:0}
     .tab{padding:9px 6px 8px;font-size:15px}
     .about-toggle{display:inline;width:auto;background:none;border:0;padding:0;color:var(--accent-d);
       font-size:13.5px;text-decoration:underline;cursor:pointer;margin-bottom:4px}
     .intro{display:none}
     .intro.open{display:block}
-    #panel fieldset,#panel details{scroll-margin-top:32px}   /* clear of the sticky handle */
+    #panel fieldset,#panel details{scroll-margin-top:50px}   /* clear of the sticky handle */
 
     /* map overlays sit clear of the sheet */
     #hud{bottom:calc(var(--sheet-h) + 12px)}
