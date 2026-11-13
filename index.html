@@ -183,6 +183,52 @@
   .modal-actions button{width:auto;padding:9px 16px}
   .modal button.danger{background:#b3382c;color:#fff;font-weight:600}
   .modal button.danger:hover{background:#93291f}
+  /* header ⋯ menu and sheet bits: phone only (see the media query below) */
+  #moreBtn,.sheet-handle,.about-toggle{display:none}
+  .hdr-actions{position:relative}
+  .hdr-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:190px;background:#fff;border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px;z-index:3100}
+  .hdr-menu[hidden]{display:none}
+  .hdr-menu button{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;
+    padding:10px 10px;color:var(--slate);font:600 14px system-ui;cursor:pointer}
+  .hdr-menu button:hover{background:var(--paper)}
+
+  /* ---------- phones: header shrinks to "Propagation", the panel becomes a pull-up sheet over the map ---------- */
+  @media (max-width:720px){
+    #brandbar{height:56px;gap:12px;padding:0 12px}
+    #brandbar img.logo{height:30px}
+    #brandbar .divider{height:26px}
+    #brandbar .title{font-size:18px;white-space:nowrap}
+    #brandbar .t-lw,#brandbar .t-st{display:none}
+    .hdr-actions .hdr-btn{display:none}
+    #moreBtn{display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;
+      padding:4px 12px 8px;letter-spacing:1px}
+    #panelToggle{display:none}
+
+    #app{position:relative;--sheet-h:150px}
+    #app.collapsed #panel{display:flex}
+    #panel{position:absolute;left:0;right:0;bottom:0;z-index:1100;width:auto;height:var(--sheet-h);
+      border-left:0;border-radius:16px 16px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.22);
+      padding:0 12px calc(12px + env(safe-area-inset-bottom));transition:height .25s ease;
+      overscroll-behavior:contain}
+    #app.dragging #panel{transition:none}
+    .sheet-handle{display:flex;position:sticky;top:0;z-index:2;justify-content:center;align-items:center;
+      height:26px;margin:0 -12px;background:var(--paper);cursor:grab;touch-action:none}
+    .sheet-handle span{width:42px;height:5px;border-radius:3px;background:#b9bfb6}
+    .tabs{margin-top:0}
+    .tab{padding:9px 6px 8px;font-size:15px}
+    .about-toggle{display:inline;width:auto;background:none;border:0;padding:0;color:var(--accent-d);
+      font-size:13.5px;text-decoration:underline;cursor:pointer;margin-bottom:4px}
+    .intro{display:none}
+    .intro.open{display:block}
+    #panel fieldset,#panel details{scroll-margin-top:32px}   /* clear of the sticky handle */
+
+    /* map overlays sit clear of the sheet */
+    #hud{bottom:calc(var(--sheet-h) + 12px)}
+    .leaflet-bottom{bottom:var(--sheet-h)}
+    #aerialToggle{top:10px;right:10px}
+    #locateBtn{top:52px;right:10px;width:42px;height:42px}
+  }
   /* field-validation measurement marker (colored by RSSI) */
   .meas-dot{width:16px;height:16px;border-radius:50%;border:2px solid #fff;
     box-shadow:0 1px 3px rgba(0,0,0,.5)}
@@ -193,13 +239,20 @@
 <header id="brandbar">
   <a href="https://jasper.tools" class="home" title="All Jasper tools"><img class="logo" src="brand/jasper-logo-white.svg" alt="Jasper" /></a>
   <div class="divider"></div>
-  <a class="title" href="/" title="Start this tool fresh">LoRaWAN <b>Propagation Study</b></a>
+  <a class="title" href="/" title="Start this tool fresh"><span class="t-lw">LoRaWAN </span><b>Propagation<span class="t-st"> Study</span></b></a>
   <div class="spacer"></div>
   <div class="hdr-actions">
     <button id="openBtn" class="hdr-btn" type="button" title="Open a .jasperprop project">📂 Open</button>
     <button id="saveBtn" class="hdr-btn" type="button" title="Save the project to a .jasperprop file">💾 Save</button>
     <button id="resetAllBtn" class="hdr-btn" type="button" title="Reset both workspaces to defaults">↺ Reset All</button>
     <input type="file" id="projFile" accept=".jasperprop,.json" style="display:none">
+    <!-- phones: Open / Save / Reset All fold into one menu -->
+    <button id="moreBtn" class="hdr-btn" type="button" title="Project" aria-haspopup="menu" aria-expanded="false">⋯</button>
+    <div id="moreMenu" class="hdr-menu" role="menu" hidden>
+      <button type="button" role="menuitem" data-click="openBtn">📂 Open project…</button>
+      <button type="button" role="menuitem" data-click="saveBtn">💾 Save project</button>
+      <button type="button" role="menuitem" data-click="resetAllBtn">↺ Reset all</button>
+    </div>
   </div>
   <button id="panelToggle" type="button" title="Hide panel">Hide panel ⟩</button>
 </header>
@@ -215,6 +268,7 @@
       </svg></button>
     <div id="hud"></div></div>
   <div id="panel">
+    <div class="sheet-handle" id="sheetHandle" role="button" aria-label="Show or hide controls"><span></span></div>
     <div class="tabs">
       <button class="tab active" id="tabPred" type="button">Prediction</button>
       <button class="tab" id="tabValid" type="button">Field Validation</button>
@@ -222,7 +276,8 @@
     <div id="status">Click on the map to place a gateway.</div>
 
     <div id="viewPred">
-      <p class="sub">Configured for <b>US915</b> (902–928 MHz ISM, FCC Part 15.247).
+      <button type="button" class="about-toggle" id="aboutBtn">About this tool</button>
+      <p class="sub intro">Configured for <b>US915</b> (902–928 MHz ISM, FCC Part 15.247).
         Click the map to add gateways, or load a KMZ/KML of sites. The tool pulls
         public terrain (AWS Terrarium DEM), runs a knife-edge diffraction path-loss
         model from every gateway, and shades the combined (best-server) coverage.</p>
@@ -485,7 +540,9 @@ let RINGS = ringsFor(edgeLevel);
 /* ---------- DOM helpers ---------- */
 const $ = id => document.getElementById(id);
 const num = id => parseFloat($(id).value);
-const status = msg => $('status').textContent = msg;
+const touch = window.matchMedia('(pointer:coarse)').matches;
+// on touch screens the instructions say "tap" rather than "click"
+const status = msg => $('status').textContent = touch ? msg.replace(/\bClick/g, 'Tap').replace(/\bclick/g, 'tap') : msg;
 
 /* ---------- map ---------- */
 const map = L.map('map', {zoomControl:true}).setView([43.5448, -80.2482], 12); // Guelph, ON
@@ -592,7 +649,7 @@ function addGateway(latlng, name){
     params:{txH:num('txH'), txP:num('txP'), txG:num('txG')}, study:null};
   gw.marker = L.marker([gw.lat,gw.lng], {draggable:true, icon:gwIconUn, zIndexOffset:1100})
     .addTo(map).bindTooltip(gw.name);
-  gw.marker.on('click', ()=>selectGw(gateways.indexOf(gw)));
+  gw.marker.on('click', ()=>{ selectGw(gateways.indexOf(gw)); sheetAtLeast('half'); });
   gw.marker.on('drag', ()=>{
     if(gateways.indexOf(gw)!==selIdx) return;        // only the profile source
     const p=gw.marker.getLatLng(); gw.lat=p.lat; gw.lng=p.lng;
@@ -735,7 +792,7 @@ function addSensor(p){
   const s={name:nm, lat:p.lat, lng:p.lng};
   s.marker=L.marker([p.lat,p.lng],{icon:sensorIcon, draggable:true, zIndexOffset:900})
     .addTo(map).bindTooltip(nm);
-  s.marker.on('click', ()=>selectSensor(sensors.indexOf(s)));
+  s.marker.on('click', ()=>{ selectSensor(sensors.indexOf(s)); sheetAtLeast('half'); });
   s.marker.on('dragend',()=>{ const q=s.marker.getLatLng(); s.lat=q.lat; s.lng=q.lng; schedulePredSave(); });
   sensors.push(s);
   selectSensor(sensors.length-1);
@@ -832,7 +889,7 @@ function addMeasurement(p){
     rssi:p.rssi!=null?p.rssi:null, note:p.note||'', time:p.time||new Date().toISOString() };
   m.marker=L.marker([m.lat,m.lng],{icon:measIconFor(m,false), draggable:true, zIndexOffset:800})
     .addTo(map).bindTooltip(measTip(m));
-  m.marker.on('click', ()=>selectMeasurement(measurements.indexOf(m)));
+  m.marker.on('click', ()=>{ selectMeasurement(measurements.indexOf(m)); sheetAtLeast('half'); });
   m.marker.on('dragend', ()=>{ const q=m.marker.getLatLng(); m.lat=q.lat; m.lng=q.lng; saveMeas(); });
   measurements.push(m);
   selectMeasurement(measurements.length-1);
@@ -1751,7 +1808,9 @@ function drawProfile(dist,ground,D){
   }
 
   // readouts
+  const firstShow = $('profBox').style.display==='none';
   $('profBox').style.display='block';
+  if(firstShow) showOnSheet($('profBox'));
   $('pfDist').textContent=(D/1000).toFixed(2)+' km';
   $('pfSnr').textContent=snr.toFixed(1)+' dB';
   $('pfSnr').style.color = snr>=thr ? 'var(--good)' : 'var(--warn)';
@@ -2077,6 +2136,88 @@ $('clearBtn').onclick=()=>{
   $('profBox').style.display='none';
   status('Overlay cleared.');
 };
+
+/* ---------- phones: pull-up sheet and ⋯ menu ---------- */
+// The panel slides over the map: 'peek' shows the tabs and status line, 'half' and 'full' show the controls.
+// Choosing a tool drops the sheet so the map is free; picking something on the map raises it.
+var sheetAtLeast, showOnSheet;
+(()=>{
+  const phone = window.matchMedia('(max-width:720px)');
+  const app = $('app'), panel = $('panel'), handle = $('sheetHandle');
+  const ORDER = ['peek', 'half', 'full'];
+  let state = 'peek';
+  const heights = () => {
+    const avail = app.clientHeight;
+    const peek = Math.min(avail, $('status').offsetTop + $('status').offsetHeight + 14);
+    return { peek, half: Math.max(peek, Math.round(avail * 0.52)), full: Math.max(peek, avail - 10) };
+  };
+  const setH = h => app.style.setProperty('--sheet-h', h + 'px');
+  function setSheet(s){
+    if(!phone.matches) return;
+    state = s;
+    setH(heights()[s]);
+    if(s === 'peek') panel.scrollTop = 0;
+  }
+  sheetAtLeast = s => { if(phone.matches && ORDER.indexOf(state) < ORDER.indexOf(s)) setSheet(s); };
+  showOnSheet = el => {
+    if(!phone.matches) return;
+    sheetAtLeast('half');
+    setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 260);
+  };
+
+  // drag the handle to resize; a quick tap steps peek → half → full → peek
+  let drag = null;
+  handle.addEventListener('pointerdown', e => {
+    if(!phone.matches) return;
+    drag = { y: e.clientY, h: panel.offsetHeight, t: Date.now(), moved: false };
+    handle.setPointerCapture(e.pointerId);
+    app.classList.add('dragging');
+  });
+  handle.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const dy = drag.y - e.clientY;
+    if(Math.abs(dy) > 4) drag.moved = true;
+    const H = heights();
+    setH(Math.max(H.peek, Math.min(H.full, drag.h + dy)));
+  });
+  const endDrag = e => {
+    if(!drag) return;
+    app.classList.remove('dragging');
+    const d = drag; drag = null;
+    if(!d.moved){ setSheet(ORDER[(ORDER.indexOf(state) + 1) % ORDER.length]); return; }
+    const H = heights(), h = panel.offsetHeight;
+    const v = (d.y - e.clientY) / Math.max(1, Date.now() - d.t);    // px/ms, positive = flicked up
+    const target = h + v * 250;                                     // let a flick carry on a bit
+    setSheet(ORDER.reduce((a, b) => Math.abs(H[b] - target) < Math.abs(H[a] - target) ? b : a));
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+
+  // picking a tool or running the study gets the sheet out of the way
+  document.querySelectorAll('.modebtn').forEach(b => b.addEventListener('click', () => setSheet('peek')));
+  $('runBtn').addEventListener('click', () => setSheet('peek'));
+  // tapping the tabs while peeking opens the sheet
+  [$('tabPred'), $('tabValid')].forEach(t => t.addEventListener('click', () => sheetAtLeast('half')));
+  $('aboutBtn').onclick = () => $('aboutBtn').nextElementSibling.classList.toggle('open');
+
+  // header ⋯ menu runs the same Open / Save / Reset All buttons
+  const menu = $('moreMenu'), more = $('moreBtn');
+  more.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', !menu.hidden); };
+  menu.querySelectorAll('[data-click]').forEach(b => b.onclick = () => { menu.hidden = true; $(b.dataset.click).click(); });
+  document.addEventListener('click', e => { if(!menu.hidden && !menu.contains(e.target)) menu.hidden = true; });
+
+  const relayout = () => {
+    if(phone.matches) setSheet(state);
+    else { app.style.removeProperty('--sheet-h'); menu.hidden = true; }
+    setTimeout(() => map.invalidateSize(), 300);
+  };
+  // a longer status message changes how much the peeking sheet needs to show
+  new MutationObserver(() => { if(phone.matches && state === 'peek' && !drag) setSheet('peek'); })
+    .observe($('status'), { childList: true, characterData: true, subtree: true });
+  phone.addEventListener('change', relayout);
+  window.addEventListener('resize', () => { if(phone.matches && !drag) setH(heights()[state]); });
+  relayout();
+})();
 
 /* ---------- restore state saved on this device (crash-safe autosave) ---------- */
 loadPredFromStore();      // gateways, sensors, settings, view, aerial
